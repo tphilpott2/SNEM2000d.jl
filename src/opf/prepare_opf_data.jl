@@ -19,9 +19,9 @@ function get_ISPhvdc_time_series(
 
     # prepare time series for hourly calculations
     # Get installed generator info, e.g. installed generation type and capacity from the ISP data
-    generator_info = _ISP.get_generator_information(data_dir)
+    generator_info = _ISP.get_generator_information(; data_dir=data_dir)
     # Get RES time series, e.g. traces from the ISP data
-    pv, wind = _ISP.get_res_timeseries(year, data_dir)
+    pv, wind = _ISP.get_res_timeseries(year; data_dir=data_dir)
     # Aggregate timeseries to obtain one profile for existing RES
     pv_series, count_pv = _ISP.aggregate_res_timeseries(pv, generator_info, "Solar")
     wind_series, count_wind = _ISP.aggregate_res_timeseries(wind, generator_info, "Wind")
@@ -29,7 +29,7 @@ function get_ISPhvdc_time_series(
     pv_rez = _ISP.make_rez_time_series(pv)
     wind_rez = _ISP.make_rez_time_series(wind)
     # Get demand traces for selected year, for each state
-    total_demand_series = _ISP.get_demand_data(scenario, year, data_dir)
+    total_demand_series = _ISP.get_demand_data(scenario, year; data_dir=data_dir)
     average_demand_per_state = Dict{String,Any}([state => mean(timeseries) for (state, timeseries) in total_demand_series])
 
     return yearly_ISPhvdc_time_series(
@@ -46,6 +46,177 @@ end
 ##########################################################################
 # Functions for editing the network data before it is used for the OPF.
 ##########################################################################
+
+# this is a modified function from the PowerModelsACDCSecurityConstrained.jl package
+# splits large coal powerplants into smaller units
+function split_large_coal_powerplants_to_units!(data)
+    split_generators = []
+    for (i, gen) in data["gen"]
+        if gen["fuel"] == "Coal" && gen["pmax"] > 5.0
+            push!(split_generators, i)
+        end
+    end
+    index_new = length(data["gen"])+1:length(data["gen"])+length(split_generators)
+    new_gen_pairs = []
+    for i in eachindex(split_generators)
+        push!(new_gen_pairs, (index_new[i], split_generators[i]))
+    end
+    for (i, j) in new_gen_pairs
+        data["gen"]["$i"] = deepcopy(data["gen"]["$j"])
+        data["gen"]["$i"]["Ramp_Up_Rate(MW/h)"] = data["gen"]["$i"]["Ramp_Up_Rate(MW/h)"] / 2
+        data["gen"]["$i"]["mbase"] = data["gen"]["$i"]["mbase"] / 2
+        data["gen"]["$i"]["qmax"] = data["gen"]["$i"]["qmax"] / 2
+        data["gen"]["$i"]["Ramp_Down_Rate(MW/h)"] = data["gen"]["$i"]["Ramp_Down_Rate(MW/h)"] / 2
+        data["gen"]["$i"]["qmin"] = data["gen"]["$i"]["qmin"] / 2
+        data["gen"]["$i"]["pmin"] = data["gen"]["$i"]["pmin"] / 2
+        data["gen"]["$i"]["qg"] = data["gen"]["$i"]["qg"] / 2
+        data["gen"]["$i"]["source_id"] = Any["gen", i]
+        data["gen"]["$i"]["index"] = i
+        data["gen"]["$i"]["pg"] = data["gen"]["$i"]["pg"] / 2
+        data["gen"]["$i"]["pmax"] = data["gen"]["$i"]["pmax"] / 2
+
+        data["gen"]["$j"]["Ramp_Up_Rate(MW/h)"] = data["gen"]["$j"]["Ramp_Up_Rate(MW/h)"] / 2
+        data["gen"]["$j"]["mbase"] = data["gen"]["$j"]["mbase"] / 2
+        data["gen"]["$j"]["qmax"] = data["gen"]["$j"]["qmax"] / 2
+        data["gen"]["$j"]["Ramp_Down_Rate(MW/h)"] = data["gen"]["$j"]["Ramp_Down_Rate(MW/h)"] / 2
+        data["gen"]["$j"]["qmin"] = data["gen"]["$j"]["qmin"] / 2
+        data["gen"]["$j"]["pmin"] = data["gen"]["$j"]["pmin"] / 2
+        data["gen"]["$j"]["qg"] = data["gen"]["$j"]["qg"] / 2
+        data["gen"]["$j"]["pg"] = data["gen"]["$j"]["pg"] / 2
+        data["gen"]["$j"]["pmax"] = data["gen"]["$j"]["pmax"] / 2
+    end
+    return data
+end
+
+# this is a modified function from the PowerModelsACDCSecurityConstrained.jl package
+# changed iterators in loops because ISPhvdc data has missing keys (deleted gens, branches, buses, etc)
+function fix_opf_data_issues!(data;
+    split_large_coal_gens=true,
+    tm_min=0.9, tm_max=1.1, ta_min=-15, ta_max=15,
+)
+
+    # Defining generator areas sets: data["area_gens"]
+
+    set1 = Set{Int64}()
+    set2 = Set{Int64}()
+    set3 = Set{Int64}()
+    set4 = Set{Int64}()
+    set5 = Set{Int64}()
+
+    for i in parse.(Int64, keys(data["gen"]))
+        gen_bus = data["gen"]["$i"]["gen_bus"]
+        if data["bus"]["$gen_bus"]["area"] == 1
+            push!(set1, data["gen"]["$i"]["index"])
+        elseif data["bus"]["$gen_bus"]["area"] == 2
+            push!(set2, data["gen"]["$i"]["index"])
+        elseif data["bus"]["$gen_bus"]["area"] == 3
+            push!(set3, data["gen"]["$i"]["index"])
+        elseif data["bus"]["$gen_bus"]["area"] == 4
+            push!(set4, data["gen"]["$i"]["index"])
+        elseif data["bus"]["$gen_bus"]["area"] == 5
+            push!(set5, data["gen"]["$i"]["index"])
+        end
+    end
+
+    data["area_gens"] = Dict{Int64,Set{Int64}}()
+    data["area_gens"][1] = set1
+    data["area_gens"][2] = set2
+    data["area_gens"][3] = set3
+    data["area_gens"][4] = set4
+    data["area_gens"][5] = set5
+
+    # Defining generator participation factors: gen["alpha"]
+    gen_total1 = sum(data["gen"]["$i"]["pmax"] for i in collect(set1))
+    gen_total2 = sum(data["gen"]["$i"]["pmax"] for i in collect(set2))
+    gen_total3 = sum(data["gen"]["$i"]["pmax"] for i in collect(set3))
+    gen_total4 = sum(data["gen"]["$i"]["pmax"] for i in collect(set4))
+    gen_total5 = sum(data["gen"]["$i"]["pmax"] for i in collect(set5))
+
+    for i in collect(set1)
+        if data["gen"]["$i"]["type"] != "VAr support"
+            data["gen"]["$i"]["alpha"] = gen_total1 / data["gen"]["$i"]["pmax"]
+        else
+            data["gen"]["$i"]["alpha"] = 0.0
+        end
+    end
+
+    for i in collect(set2)
+        if data["gen"]["$i"]["type"] != "VAr support"
+            data["gen"]["$i"]["alpha"] = gen_total2 / data["gen"]["$i"]["pmax"]
+        else
+            data["gen"]["$i"]["alpha"] = 0.0
+        end
+    end
+
+    for i in collect(set3)
+        if data["gen"]["$i"]["type"] != "VAr support"
+            data["gen"]["$i"]["alpha"] = gen_total3 / data["gen"]["$i"]["pmax"]
+        else
+            data["gen"]["$i"]["alpha"] = 0.0
+        end
+    end
+
+    for i in collect(set4)
+        if data["gen"]["$i"]["type"] != "VAr support"
+            data["gen"]["$i"]["alpha"] = gen_total4 / data["gen"]["$i"]["pmax"]
+        else
+            data["gen"]["$i"]["alpha"] = 0.0
+        end
+    end
+
+    for i in collect(set5)
+        if data["gen"]["$i"]["type"] != "VAr support"
+            data["gen"]["$i"]["alpha"] = gen_total5 / data["gen"]["$i"]["pmax"]
+        else
+            data["gen"]["$i"]["alpha"] = 0.0
+        end
+    end
+
+    # Adding emergency ac branch ratings and transformer tap and shift bounds 
+    for i in parse.(Int64, keys(data["branch"]))
+        data["branch"]["$i"]["rate_c"] = 1.3 * data["branch"]["$i"]["rate_c"]
+        data["branch"]["$i"]["rate_a"] = data["branch"]["$i"]["rate_c"]
+        data["branch"]["$i"]["rate_b"] = data["branch"]["$i"]["rate_c"]
+        data["branch"]["$i"]["tm_min"] = tm_min
+        data["branch"]["$i"]["tm_max"] = tm_max
+        data["branch"]["$i"]["ta_min"] = ta_min
+        data["branch"]["$i"]["ta_max"] = ta_max
+    end
+
+    # Defining the smoothing coefficient for generator response constraint
+    for i in parse.(Int64, keys(data["gen"]))
+        data["gen"]["$i"]["ep"] = 1e-1
+    end
+
+    # Ading converter dead band voltage bounds and smoothing coefficient for droop constraints
+    for i in parse.(Int64, keys(data["convdc"]))
+        data["convdc"]["$i"]["ep"] = 1e-1
+        data["convdc"]["$i"]["Vdclow"] = 0.98
+        data["convdc"]["$i"]["Vdchigh"] = 1.02
+    end
+
+    # Empting the data["contingencies"] Dict to save memory  
+
+    data["contingencies"] = []
+
+    # Splitting large coal plant modeled as single generator into units
+    if split_large_coal_gens
+        split_large_coal_powerplants_to_units!(data)
+    end
+
+    # Adding converter convdc["busac_i"])"]["area"]
+    for (i, conv) in data["convdc"]
+        data["busdc"]["$(conv["busdc_i"])"]["area"] = data["bus"]["$(conv["busac_i"])"]["area"]
+    end
+
+    # Setting upper and lower bound of voltage the same for all buses 
+    for (i, bus) in data["bus"]
+        bus["vmax"] = 1.1
+        bus["vmin"] = 0.9
+    end
+
+    return data
+end
 
 # reassign buses islanded from defined area
 function reassign_buses_to_areas(data)
@@ -586,8 +757,7 @@ function prepare_opf_data_stage_1(
     turn_off_inactive_generators!(opf_data)
 
     # add necessary data for use with scopf (also pfcopf)
-    _PMACDCSC.fix_scopf_data_issues!(opf_data,
-        define_contingencies=false,
+    fix_opf_data_issues!(opf_data,
         ta_min=0.0, ta_max=0.0, tm_min=1.0, tm_max=1.0
     )
 
@@ -655,8 +825,8 @@ function prepare_opf_data_stage_2(
     _ISP.add_area_dict!(data_hvdc)
 
     # Get generation capacity of REZ and the grid extensions and update grid data
-    rez_capacities = _ISP.get_rez_capacity_data(scenario, year, data_dir)
-    rez_connections = _ISP.get_rez_grid_extensions(data_dir)
+    rez_capacities = _ISP.get_rez_capacity_data(scenario, year; data_dir=data_dir)
+    rez_connections = _ISP.get_rez_grid_extensions(; data_dir=data_dir)
     _ISP.add_rez_and_connections!(data_hvdc, rez_connections, rez_capacities,
         max_gen_power=nothing, skip_zero_capacity_rez=false
     )
@@ -718,8 +888,7 @@ function prepare_opf_data_stage_2(
     turn_off_inactive_generators!(opf_data)
 
     # add necessary data for use with scopf (also pfcopf)
-    _PMACDCSC.fix_scopf_data_issues!(opf_data,
-        define_contingencies=false,
+    fix_opf_data_issues!(opf_data,
         ta_min=0.0, ta_max=0.0, tm_min=1.0, tm_max=1.0
     )
 
