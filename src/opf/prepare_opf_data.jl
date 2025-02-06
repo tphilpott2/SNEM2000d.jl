@@ -704,7 +704,6 @@ function prepare_opf_data_stage_1(
     assign_custom_fuel_mix!(data_hvdc, custom_fuel_path)
 
     # Add min generation based on unsw predictions
-    # set_pmin_to_unsw_predictions!(data_hvdc, joinpath(snem2000d_dir, "data", "unsw_predictions_with_median_costs.csv"))
     set_pmin_values_by_fuel!(
         data_hvdc,
         Dict(
@@ -835,7 +834,6 @@ function prepare_opf_data_stage_2(
     assign_custom_fuel_mix!(data_hvdc, custom_fuel_path)
 
     # Add min generation based on unsw predictions
-    # set_pmin_to_unsw_predictions!(data_hvdc, joinpath(snem2000d_dir, "data", "unsw_predictions_with_median_costs.csv"))
     set_pmin_values_by_fuel!(
         data_hvdc,
         Dict(
