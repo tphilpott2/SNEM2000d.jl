@@ -95,7 +95,7 @@ function run_hourly_opfs_multiprocessing(
 )
     addprocs_if_needed(n_procs)
 
-    @everywhere include(raw"C:\Users\tomph\OneDrive - University of Wollongong\PhD\code\synthetic_nem_models\nem_2000_isphvdc\src\nem_2000_isphvdc.jl")
+    @everywhere include(joinpath(dirname(@__DIR__), "SNEM2000d.jl"))
 
 
     # Distribute the hour range across workers
