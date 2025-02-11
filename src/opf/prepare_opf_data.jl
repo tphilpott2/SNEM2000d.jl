@@ -694,8 +694,8 @@ function prepare_opf_data_stage_1(
     _ISP.add_area_dict!(data_hvdc)
 
     # Get generation capacity of REZ and the grid extensions and update grid data
-    rez_capacities = _ISP.get_rez_capacity_data(scenario, year, data_dir)
-    rez_connections = _ISP.get_rez_grid_extensions(data_dir)
+    rez_capacities = _ISP.get_rez_capacity_data(scenario, year; data_dir=data_dir)
+    rez_connections = _ISP.get_rez_grid_extensions(; data_dir=data_dir)
     _ISP.add_rez_and_connections!(data_hvdc, rez_connections, rez_capacities,
         max_gen_power=nothing, skip_zero_capacity_rez=false
     )
