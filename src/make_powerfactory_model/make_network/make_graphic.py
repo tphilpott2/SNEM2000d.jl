@@ -92,11 +92,23 @@ def make_IntGrf(app, target_dir, elm_data, elm):
     return grf
 
 
-# entries of IntGrfcon.rX and IntGrfcon.rY must be of length 20
-# i dont think theres an easier way to input them
-def pad_gco_entry(app, input_list):
-    input_list.extend([-1] * (20 - len(input_list)))
-    return input_list
+# Legacy code for IntGrfcon. The commented out version worked for PowerFactory 2022 but doesnt work for 2025
+
+# # entries of IntGrfcon.rX and IntGrfcon.rY must be of length 20
+# # i dont think theres an easier way to input them
+# def pad_gco_entry(app, input_list):
+#     # input_list.extend([-1] * (20 - len(input_list)))
+#     return input_list
+
+
+# # make IntGrfcon object for graphic coordinates
+# # object is placed inside IntGrf object
+# def make_IntGrfcon(app, grf, rX, rY, gco_name="GCO_1"):
+#     gco = grf.CreateObject("IntGrfcon")
+#     gco.loc_name = gco_name
+#     gco.rX = pad_gco_entry(app, rX)
+#     gco.rY = pad_gco_entry(app, rY)
+#     return gco
 
 
 # make IntGrfcon object for graphic coordinates
@@ -104,8 +116,8 @@ def pad_gco_entry(app, input_list):
 def make_IntGrfcon(app, grf, rX, rY, gco_name="GCO_1"):
     gco = grf.CreateObject("IntGrfcon")
     gco.loc_name = gco_name
-    gco.rX = pad_gco_entry(app, rX)
-    gco.rY = pad_gco_entry(app, rY)
+    for i in range(len(rX)):
+        gco.SetAttribute(f"points:{i}", [rX[i], rY[i]])
     return gco
 
 
@@ -130,7 +142,6 @@ def make_all_grfs_ElmSym(app, data):
         # make IntGrf for ElmSym
         gen_data = data["network"]["ElmSym"][gen.loc_name]
         grf = make_IntGrf(app, dig, gen_data, gen)
-
         # make graphic coordinate object (GCO (i think thats what it stands for))
         make_IntGrfcon(app, grf, gen_data["gco"]["rX"], gen_data["gco"]["rY"])
 
