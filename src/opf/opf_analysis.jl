@@ -31,7 +31,7 @@ function get_metadata_df(yearly_results)
 end
 
 function get_trace_bus_vm(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
-    df_vm = d2d(opf_data["bus"], ["k", "name", "area"])
+    df_vm = dict_to_dataframe(opf_data["bus"], ["k", "name", "area"])
     df_vm.ind = parse.(Int, df_vm.ind)
 
     for (hour, hourly_results) in yearly_results
@@ -45,7 +45,7 @@ function get_trace_bus_vm(yearly_results, opf_data; termination_status=["LOCALLY
 end
 
 function get_trace_bus_va(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
-    df_va = d2d(opf_data["bus"], ["k", "name", "area"])
+    df_va = dict_to_dataframe(opf_data["bus"], ["k", "name", "area"])
     df_va.ind = parse.(Int, df_va.ind)
 
     for (hour, hourly_results) in yearly_results
@@ -60,7 +60,7 @@ end
 
 # aggregation just add the violations together for each bus.
 function get_trace_bus_p_vio_agg(yearly_results, opf_data; tolerance=6, termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
-    df_p_vio = d2d(opf_data["bus"], ["k", "name", "area"])
+    df_p_vio = dict_to_dataframe(opf_data["bus"], ["k", "name", "area"])
     df_p_vio.ind = parse.(Int, df_p_vio.ind)
 
     for (hour, hourly_results) in yearly_results
@@ -85,7 +85,7 @@ function get_trace_bus_p_vio_agg(yearly_results, opf_data; tolerance=6, terminat
 end
 
 function get_trace_bus_q_vio_agg(yearly_results, opf_data; tolerance=6, termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
-    df_q_vio = d2d(opf_data["bus"], ["k", "name", "area"])
+    df_q_vio = dict_to_dataframe(opf_data["bus"], ["k", "name", "area"])
     df_q_vio.ind = parse.(Int, df_q_vio.ind)
 
     for (hour, hourly_results) in yearly_results
@@ -110,7 +110,7 @@ end
 
 function get_trace_gen_pg(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse generator details from opf_data
-    df_gen_p = d2d(opf_data["gen"], ["k", "name", "type", "gen_bus"])
+    df_gen_p = dict_to_dataframe(opf_data["gen"], ["k", "name", "type", "gen_bus"])
     insertcols!(df_gen_p, 5, :area => [opf_data["bus"]["$(row.gen_bus)"]["area"] for row in eachrow(df_gen_p)])
     select!(df_gen_p, Not(:gen_bus))
     df_gen_p.ind = parse.(Int, df_gen_p.ind)
@@ -139,7 +139,7 @@ end
 
 function get_trace_gen_qg(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse generator details from opf_data
-    df_gen_q = d2d(opf_data["gen"], ["k", "name", "type", "gen_bus"])
+    df_gen_q = dict_to_dataframe(opf_data["gen"], ["k", "name", "type", "gen_bus"])
     insertcols!(df_gen_q, 5, :area => [opf_data["bus"]["$(row.gen_bus)"]["area"] for row in eachrow(df_gen_q)])
     select!(df_gen_q, Not(:gen_bus))
     df_gen_q.ind = parse.(Int, df_gen_q.ind)
@@ -162,7 +162,7 @@ end
 
 function get_trace_branch_pf(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse branch details from opf_data
-    df_branch_pf = d2d(opf_data["branch"], ["k", "f_bus", "t_bus"])
+    df_branch_pf = dict_to_dataframe(opf_data["branch"], ["k", "f_bus", "t_bus"])
     insertcols!(df_branch_pf, 4, :area => [opf_data["bus"]["$(row.f_bus)"]["area"] for row in eachrow(df_branch_pf)])
     df_branch_pf.ind = parse.(Int, df_branch_pf.ind)
 
@@ -184,7 +184,7 @@ end
 
 function get_trace_branch_qf(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse branch details from opf_data
-    df_branch_qf = d2d(opf_data["branch"], ["k", "f_bus", "t_bus"])
+    df_branch_qf = dict_to_dataframe(opf_data["branch"], ["k", "f_bus", "t_bus"])
     insertcols!(df_branch_qf, 4, :area => [opf_data["bus"]["$(row.f_bus)"]["area"] for row in eachrow(df_branch_qf)])
     df_branch_qf.ind = parse.(Int, df_branch_qf.ind)
 
@@ -206,7 +206,7 @@ end
 
 function get_trace_branch_pt(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse branch details from opf_data
-    df_branch_pt = d2d(opf_data["branch"], ["k", "f_bus", "t_bus"])
+    df_branch_pt = dict_to_dataframe(opf_data["branch"], ["k", "f_bus", "t_bus"])
     insertcols!(df_branch_pt, 4, :area => [opf_data["bus"]["$(row.t_bus)"]["area"] for row in eachrow(df_branch_pt)])
     df_branch_pt.ind = parse.(Int, df_branch_pt.ind)
 
@@ -228,7 +228,7 @@ end
 
 function get_trace_branch_qt(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse branch details from opf_data
-    df_branch_qt = d2d(opf_data["branch"], ["k", "f_bus", "t_bus"])
+    df_branch_qt = dict_to_dataframe(opf_data["branch"], ["k", "f_bus", "t_bus"])
     insertcols!(df_branch_qt, 4, :area => [opf_data["bus"]["$(row.t_bus)"]["area"] for row in eachrow(df_branch_qt)])
     df_branch_qt.ind = parse.(Int, df_branch_qt.ind)
 
@@ -250,7 +250,7 @@ end
 
 function get_trace_branch_tm(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse branch details from opf_data
-    df_branch_tm = d2d(opf_data["branch"], ["k", "f_bus", "t_bus"])
+    df_branch_tm = dict_to_dataframe(opf_data["branch"], ["k", "f_bus", "t_bus"])
     insertcols!(df_branch_tm, 4, :area => [opf_data["bus"]["$(row.f_bus)"]["area"] for row in eachrow(df_branch_tm)])
     df_branch_tm.ind = parse.(Int, df_branch_tm.ind)
 
@@ -271,7 +271,7 @@ end
 
 function get_trace_branch_tm_neg_vio(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse branch details from opf_data
-    df_branch_tm_neg_vio = d2d(opf_data["branch"], ["k", "f_bus", "t_bus"])
+    df_branch_tm_neg_vio = dict_to_dataframe(opf_data["branch"], ["k", "f_bus", "t_bus"])
     insertcols!(df_branch_tm_neg_vio, 4, :area => [opf_data["bus"]["$(row.f_bus)"]["area"] for row in eachrow(df_branch_tm_neg_vio)])
     df_branch_tm_neg_vio.ind = parse.(Int, df_branch_tm_neg_vio.ind)
 
@@ -290,7 +290,7 @@ end
 
 function get_trace_branch_tm_pos_vio(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse branch details from opf_data
-    df_branch_tm_pos_vio = d2d(opf_data["branch"], ["k", "f_bus", "t_bus"])
+    df_branch_tm_pos_vio = dict_to_dataframe(opf_data["branch"], ["k", "f_bus", "t_bus"])
     insertcols!(df_branch_tm_pos_vio, 4, :area => [opf_data["bus"]["$(row.f_bus)"]["area"] for row in eachrow(df_branch_tm_pos_vio)])
     df_branch_tm_pos_vio.ind = parse.(Int, df_branch_tm_pos_vio.ind)
 
@@ -309,7 +309,7 @@ end
 
 function get_trace_branch_tm_vio_agg(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse branch details from opf_data
-    df_branch_tm_vio_agg = d2d(opf_data["branch"], ["k", "f_bus", "t_bus"])
+    df_branch_tm_vio_agg = dict_to_dataframe(opf_data["branch"], ["k", "f_bus", "t_bus"])
     insertcols!(df_branch_tm_vio_agg, 4, :area => [opf_data["bus"]["$(row.f_bus)"]["area"] for row in eachrow(df_branch_tm_vio_agg)])
     df_branch_tm_vio_agg.ind = parse.(Int, df_branch_tm_vio_agg.ind)
 
@@ -332,7 +332,7 @@ end
 
 function get_trace_busdc_p_vio(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse busdc details from opf_data
-    df_busdc_p_vio = d2d(opf_data["busdc"], ["k", "busdc_i"])
+    df_busdc_p_vio = dict_to_dataframe(opf_data["busdc"], ["k", "busdc_i"])
     # insertcols!(df_busdc_p_vio, 3, :area => [opf_data["busdc"]["$(row.busdc_i)"]["area"] for row in eachrow(df_busdc_p_vio)])
     df_busdc_p_vio.ind = parse.(Int, df_busdc_p_vio.ind)
 
@@ -351,7 +351,7 @@ end
 
 function get_trace_gen_alpha_g(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse generator details from opf_data
-    df_gen_alpha_g = d2d(opf_data["gen"], ["k", "gen_bus", "fuel"])
+    df_gen_alpha_g = dict_to_dataframe(opf_data["gen"], ["k", "gen_bus", "fuel"])
     insertcols!(df_gen_alpha_g, 4, :area => [opf_data["bus"]["$(row.gen_bus)"]["area"] for row in eachrow(df_gen_alpha_g)])
     df_gen_alpha_g.ind = parse.(Int, df_gen_alpha_g.ind)
 
@@ -370,7 +370,7 @@ end
 
 function get_trace_load_curt(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse generator details from opf_data
-    df_load_curt = d2d(opf_data["load"], ["k", "load_bus"])
+    df_load_curt = dict_to_dataframe(opf_data["load"], ["k", "load_bus"])
     insertcols!(df_load_curt, 2, :area => [opf_data["bus"]["$(row.load_bus)"]["area"] for row in eachrow(df_load_curt)])
     df_load_curt.ind = parse.(Int, df_load_curt.ind)
 
@@ -389,7 +389,7 @@ end
 
 function get_trace_load_pd(yearly_results, opf_data; termination_status=["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED", "ITERATION_LIMIT"])
     # parse load details from opf_data
-    df_load_pd = d2d(opf_data["load"], ["k", "load_bus", "pd"])
+    df_load_pd = dict_to_dataframe(opf_data["load"], ["k", "load_bus", "pd"])
     insertcols!(df_load_pd, 2, :area => [opf_data["bus"]["$(row.load_bus)"]["area"] for row in eachrow(df_load_pd)])
     df_load_pd.ind = parse.(Int, df_load_pd.ind)
 

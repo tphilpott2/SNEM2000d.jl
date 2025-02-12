@@ -38,6 +38,15 @@ function run_hourly_opfs(
             continue
         end
 
+        # make directory for hourly results
+        hour_dir = joinpath(results_dir, string(hour))
+        if isdir(hour_dir) == false
+            mkdir(hour_dir)
+            println("Created: '$hour_dir'")
+        else
+            println("Already exists: '$hour_dir'")
+        end
+
         # copy opf data for hourly calculations
         hourly_data = deepcopy(opf_data)
 
@@ -67,12 +76,12 @@ function run_hourly_opfs(
         # Export results
         println("Exporting results for hour $hour")
         export_hourly_opf_result(
-            mkdir_if(joinpath(results_dir, string(hour))),
+            hour_dir,
             opf_result
         )
         if export_load_demand
             export_hourly_load_demand(
-                mkdir_if(joinpath(results_dir, string(hour))),
+                hour_dir,
                 hourly_data
             )
         end
@@ -103,7 +112,7 @@ function run_hourly_opfs_multiprocessing(
     hour_chunks = [hours[i:min(i + chunk_size - 1, end)] for i in 1:chunk_size:length(hours)]
 
     @sync @distributed for chunk in hour_chunks
-        run_hourly_opfs_with_uc(
+        run_hourly_opfs(
             chunk,
             opf_function,
             opf_data,
@@ -133,7 +142,7 @@ function export_hourly_opf_result(output_dir, opf_result)
     output_dfs = Dict()
     for (class, class_results) in opf_result["solution"]
         if class_results isa Dict
-            output_dfs[class] = dict_to_df(
+            output_dfs[class] = dict_to_dataframe(
                 class_results,
                 vcat(["k"], get_result_variables(class_results)),
                 add_missing_vars=true
@@ -155,7 +164,7 @@ function export_hourly_opf_result(output_dir, opf_result)
 end
 
 function export_hourly_load_demand(output_dir, hourly_data)
-    df = d2d(hourly_data["load"], ["k", "status", "pd", "qd"])
+    df = dict_to_dataframe(hourly_data["load"], ["k", "status", "pd", "qd"])
     df.ind = parse.(Int, df.ind)
     sort!(df, :ind)
     CSV.write(joinpath(output_dir, "load.csv"), df)

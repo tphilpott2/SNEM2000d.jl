@@ -14,7 +14,7 @@ end
 # Useful with PowerModels.jl NDD
 ##########################################################################
 
-function dict_to_df(data_dict::Dict, vars::Vector{Any})
+function dict_to_dataframe(data_dict::Dict, vars::Vector{Any})
     df = DataFrame()
     for var in vars
         if var == "k"
@@ -36,7 +36,7 @@ function dict_to_df(data_dict::Dict, vars::Vector{Any})
     return df
 end
 
-function dict_to_df(data_dict::Dict, vars::Vector{String}; add_missing_vars::Bool=false)
+function dict_to_dataframe(data_dict::Dict, vars::Vector{String}; add_missing_vars::Bool=false)
     df = DataFrame()
     for var in vars
         if var == "k"
@@ -56,16 +56,13 @@ function dict_to_df(data_dict::Dict, vars::Vector{String}; add_missing_vars::Boo
     return df
 end
 
-function dict_to_df(data_dict::Dict, ; add_missing_vars::Bool=false)
+function dict_to_dataframe(data_dict::Dict, ; add_missing_vars::Bool=false)
     vars = ["k"]
     for v in values(data_dict)
         append!(vars, vec(keys(v)))
     end
-    return dict_to_df(data_dict, unique(vars), add_missing_vars=add_missing_vars)
+    return dict_to_dataframe(data_dict, unique(vars), add_missing_vars=add_missing_vars)
 end
-
-d2d(data_dict::Dict, vars::Vector{String}; add_missing_vars::Bool=false) = dict_to_df(data_dict, vars, add_missing_vars=add_missing_vars)
-d2d(data_dict::Dict; add_missing_vars::Bool=false) = dict_to_df(data_dict, add_missing_vars=add_missing_vars)
 
 
 ##########################################################################

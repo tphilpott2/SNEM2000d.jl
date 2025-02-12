@@ -294,7 +294,7 @@ end
 # also deletes branches that are connected to these buses
 function delete_calc_irrelevant_buses!(opf_data)
     # find calc_irrelevant buses
-    bus_df = d2d(opf_data["bus"], ["k", "name"])
+    bus_df = dict_to_dataframe(opf_data["bus"], ["k", "name"])
     bus_df.ind = parse.(Int, bus_df.ind)
     bus_df.gens = zeros(Int, nrow(bus_df))
     bus_df.loads = zeros(Int, nrow(bus_df))
@@ -477,7 +477,7 @@ function get_hypersim_tappable_transformers(opf_data, dir_hypersim_csvs)
 
     # Match transformer names to those in the opf data
     tappable_transformers = [join(split(trf_name, "_")[1:end-1], "_") for trf_name in tappable_transformers]
-    branch_data = d2d(opf_data["branch"], ["k", "name"])
+    branch_data = dict_to_dataframe(opf_data["branch"], ["k", "name"])
     sort!(branch_data, :name)
 
     filter!(
