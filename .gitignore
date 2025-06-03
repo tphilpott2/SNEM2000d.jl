@@ -9,18 +9,46 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Results
-/results/**/*.csv
+# Bulky results
+/results/load_flow_verification/
+/results/powerfactory/mainland_lccs_no_fcas/*.csv
+/results/powerfactory/mainland_lccs_with_fcas/*.csv
+/results/powerfactory/small_signal/*/*.csv
+# /results/opf/
+/results/opf/more_setpoints/
 
 # ISPHVDC data
 /data/ISPHVDC/**
 
 # data that is not mine and i dont know if i can publish here
-/data/hypersim_csvs/
+# also not needed for the package
 /data/Fuel_and_Technology_Cost_Review_Data_ACIL_Allen.xlsx
 /data/NEM Generation Information July 2021.xlsx
 /data/unsw_predictions_with_median_costs.csv
 
+# stuff that doesnt need to be in the repo
+/scripts/powerfactory_studies/lcc_studies/run_single_mainland_LCC.py
+/scripts/make_powerfactory_model/isp_variations/
+/scripts/opf_studies/get_more_setpoints/
+/data/SNEM2000d_pf_data_archive/
+/results/mainland_lccs_plots/
+scripts/move_results.jl
+scripts/opf_studies/run_stage_2_test_if_broken.jl
+scripts/make_powerfactory_model/make_network_with_ISP_variations.py
+
+# archive files
+/data/archive/
+/scripts/powerfactory_studies/lcc_studies/archive/
+/scripts/IAS_publication_figures/archive/
+/results/IAS_publication_figures/pre_revision_2/
+/scripts/IAS_publication_figures/pre_revision_2/
+/scripts/powerfactory_studies/small_signal/archive/
+
+
 # working files
 test.jl
 test.py
+src/SNEM2000d_local.jl
+scrit flow for paper.txt
+SNEM2000d.code-workspace
+todo.txt
