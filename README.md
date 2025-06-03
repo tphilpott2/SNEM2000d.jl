@@ -60,20 +60,48 @@ This section of the project contains Julia code, used to export CSVs which store
 - The Julia source code is stored in `src/make_powerfactory_model/write_pf_data_csvs`
 - The Python source code is stored in `src/make_powerfactory_model/make_network`
 - The operating scenarios derived from the OPF studies are applied to the PowerFactory model using the module `src/make_powerfactory_model/applyscenario`
-- A script to set REZ IBGs to voltage sources is stored in `scripts/make_powerfactory_model/set_rez_ibgs_to_voltage_sources.py`
 
-The order of execution used in the development of the PowerFactory model is as follows:
+The order of execution used in the development of the PowerFactory model is as follows below. Note that these scripts must be run in order, as later scripts use files generated in earlier scripts, or, in the case of the python scripts, subsequent modifications to the network build on each other.
 
 1. `scripts/make_powerfactory_model/export_SNEM2000d.jl`
 2. `scripts/make_powerfactory_model/make_network.jl`
 3. `scripts/make_powerfactory_model/add_2050_operation_scenarios.jl`
-4. `scripts/make_powerfactory_model/set_rez_IBGs_to_voltage_sources.jl`
 
 #### Dynamic Studies using the PowerFactory model
 
 The scripts used to perform the dynamic studies and analysis described in the related publication are stored in `scripts/powerfactory_studies`. The figures used in the publication are generated using the scripts in `scripts/IAS_publication_figures`.
 
-Note that the figures generated and stored in `results/powerfactory/rms_steady_state_plots` are sorted manually into the subfolder categories.
+Note that the results files for dynamic studies have been omitted as they are quite large.
+
+The order of execution and results files generated for the studies run in the paper is:
+
+Small signal studies:
+1. `sripts\powerfactory_studies\small_signal\small_signal_1.py`
+ - `results\powerfactory\small_signal\small_signal_1`
+2. `sripts\powerfactory_studies\small_signal\analysis_small_signal_1.jl`
+ - `results\powerfactory\small_signal\unstable_hours_stage_1.txt`
+3. `sripts\powerfactory_studies\small_signal\small_signal_2.py`
+4. `sripts\powerfactory_studies\small_signal\small_signal_3.py`
+5. `scripts\IAS_publication_figures\small_signal_polar_plots.jl`
+ - `results\IAS_publication_figures\(all polar plot figures).png`
+
+Time domain studies:
+1. `sripts\powerfactory_studies\mainland_lccs\run_mainland_LCCs_no_FCAS.py`
+ - results\powerfactory\mainland_lccs_no_FCAS
+2. `sripts\powerfactory_studies\mainland_lccs\analyse_FCAS_capacity.jl`
+ - data\mainland_fcas_ibgs_2050.csv
+3. `sripts\powerfactory_studies\mainland_lccs\run_mainland_LCCs_with_FCAS.py`
+ - results\powerfactory\mainland_lccs_with_FCAS
+4. `sripts\powerfactory_studies\mainland_lccs\make_mainland_LCC_result_summary.jl`
+ - results\powerfactory\mainland_lccs_results_summary.csv
+ - results\mainland_lccs_plots\manual_sort
+
+At this stage plots are manually sorted to identify unstable simulations. Subsequenct analysis for the paper is then performed identify
+
+`scripts\IAS_publication_figures\fcas_procured.jl`
+`scripts\IAS_publication_figures\frequency_nadir.jl`
+`scripts\IAS_publication_figures\instability_category.jl`
+
 
 #### Isolate section
 
