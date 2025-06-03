@@ -166,7 +166,7 @@ def make_ElmSvs(app, net, elm_data, bus1):
 def make_ElmComp(app, net, name, frame):
     # make composite model
     comp_model = net.CreateObject("ElmComp")
-    comp_model.loc_name = f"comp_model_{name}"
+    comp_model.loc_name = name
     comp_model.typ_id = frame
     return comp_model
 
@@ -178,7 +178,11 @@ def make_ElmDsl(app, target_dir, elm_data, dsl_model_type):
 
     #  set attributes
     for param, value in elm_data["elm"].items():
-        dsl.SetAttribute(param, value)
+        try:
+            dsl.SetAttribute(param, value)
+        except:
+            app.PrintInfo(f"{param} \t {value}")
+            dsl.SetAttribute(param, value)
 
     # set matrix entries
     if "mat" in elm_data.keys():
@@ -202,6 +206,13 @@ def make_StaVmea(app, target_dir, v_measuremant_data):
     return v_measurement
 
 
+def make_StaImea(app, target_dir, i_measurement_data):
+    # make i_measurement
+    i_measurement = make_element(app, target_dir, i_measurement_data, "StaImea")
+
+    return i_measurement
+
+
 def make_synchronous_generator(
     app,
     net,
@@ -217,7 +228,7 @@ def make_synchronous_generator(
     name = elm_data["elm"]["loc_name"]
 
     # make composite model
-    comp_model = make_ElmComp(app, net, name, frame)
+    comp_model = make_ElmComp(app, net, f"Frame SYM {name}", frame)
 
     # make ElmSym
     gen = make_ElmSym(app, net, elib, elm_data, bus1, station_controller)
@@ -541,5 +552,241 @@ def make_pv_generator(
             None,
         ],
     )
+
+    return comp_model
+
+
+def make_WECC_plant_control(
+    app,
+    gen,
+    gen_comp_model,
+    plant_control_dsl,
+    frame,
+    v_measurement=None,
+    pq_measurement=None,
+    i_measurement=None,
+):
+    name = f"Frame WECC Plant Control {gen.loc_name}"
+
+    # TODO: add other plant control frames (if necessary)
+    if frame.loc_name != "Frame WECC Plant Control":
+        raise ValueError(
+            f"Plant control frame type {frame.loc_name} is not implemented."
+        )
+
+    # make composite model
+    plant_control_comp_model = make_ElmComp(app, gen_comp_model, name, frame)
+
+    # add plant control dsl
+    plant_control_comp_model.SetAttribute(
+        "Plant Level Control",
+        plant_control_dsl,
+    )
+
+    # add v_measurement
+    if v_measurement is None:  # make if v_measurement is None
+        v_measurement_data = {
+            "elm": {
+                "loc_name": f"v_meas_{name}",
+                "pbusbar": gen.bus1.cterm,
+                "iOutput": 0,
+                "i_mode": 1,
+                "iAstabint": 1,
+            }
+        }
+        v_measurement = make_StaVmea(app, plant_control_comp_model, v_measurement_data)
+    plant_control_comp_model.SetAttribute("Voltage Measurement", v_measurement)
+
+    # add pq_measurement
+    if pq_measurement is None:  # make if pq_measurement is None
+        pq_measurement_data = {
+            "elm": {
+                "loc_name": f"pq_meas_{name}",
+                "pcubic": gen.bus1,
+                "i_mode": 1,
+                "i_orient": 1,
+                "iAstabint": 1,
+            }
+        }
+        pq_measurement = make_StaPqmea(
+            app, plant_control_comp_model, pq_measurement_data
+        )
+    plant_control_comp_model.SetAttribute("Power Measurement", pq_measurement)
+
+    # add i_measurement
+    if i_measurement is None:  # make if i_measurement is None
+        i_measurement_data = {
+            "elm": {
+                "loc_name": f"i_meas_{name}",
+                "pcubic": gen.bus1,
+                "i_mode": 1,
+            }
+        }
+        i_measurement = make_StaImea(app, plant_control_comp_model, i_measurement_data)
+    plant_control_comp_model.SetAttribute("Current Measurement", i_measurement)
+
+    return plant_control_comp_model
+
+
+# makes a WECC wind turbine model using the model defined in powerfactory 2025
+def make_WECC_wtg(
+    app,
+    net,
+    elm_data,
+    bus1,
+    station_controller,
+    frame,
+    wecc_dsl_models,
+    plant_control_frame=None,
+):
+    name = elm_data["elm"]["loc_name"]
+
+    # make composite model
+    comp_model = make_ElmComp(app, net, f"Frame WECC WTG {name}", frame)
+
+    # make ElmGenstat and connect to composite model
+    gen = make_ElmGenstat(app, net, elm_data, bus1, station_controller)
+    comp_model.SetAttribute("Generator", gen)
+
+    # make ElmDsls
+    plant_control_dsl = None
+    for dsl_name, dsl_model in elm_data["dsl"].items():
+        # make dsl
+        dsl = make_ElmDsl(
+            app,
+            comp_model,
+            dsl_model,
+            wecc_dsl_models[dsl_name]["blkdef"],
+        )
+
+        # check if the DSL model is a plant controller and return if so.
+        # otherwise set dsl to correct slot
+        slot_name = wecc_dsl_models[dsl_name]["slot"]
+        if slot_name == "Plant Control DSL":
+            plant_control_dsl = dsl
+            continue
+
+        # set dsl to correct slot
+        comp_model.SetAttribute(slot_name, dsl)
+
+    # make measurement devices
+    pq_measurement_data = {
+        "elm": {
+            "loc_name": f"pq_meas_{name}",
+            "pcubic": gen.bus1,
+            "i_mode": 1,
+            "i_orient": 1,
+            "iAstabint": 1,
+        }
+    }
+    pq_measurement = make_StaPqmea(app, comp_model, pq_measurement_data)
+    comp_model.SetAttribute("Power Measurement", pq_measurement)
+
+    v_measurement_data = {
+        "elm": {
+            "loc_name": f"v_meas_{name}",
+            "pbusbar": gen.bus1.cterm,
+            "iOutput": 0,
+            "i_mode": 1,
+            "iAstabint": 1,
+        }
+    }
+    v_measurement = make_StaVmea(app, comp_model, v_measurement_data)
+    comp_model.SetAttribute("Voltage Measurement", v_measurement)
+
+    # make plant control model if required
+    if plant_control_dsl is not None:
+        plant_control_comp_model = make_WECC_plant_control(
+            app,
+            gen,
+            comp_model,
+            plant_control_dsl,
+            plant_control_frame,
+            v_measurement=v_measurement,
+            pq_measurement=pq_measurement,
+        )
+        comp_model.SetAttribute("Plant Control", plant_control_comp_model)
+
+    return comp_model
+
+
+# makes a WECC large scale pv model using the model defined in powerfactory 2025
+def make_WECC_large_scale_pv(
+    app,
+    net,
+    elm_data,
+    bus1,
+    station_controller,
+    frame,
+    wecc_dsl_models,
+    plant_control_frame=None,
+):
+    name = elm_data["elm"]["loc_name"]
+
+    # make composite model
+    comp_model = make_ElmComp(app, net, f"Frame WECC PV {name}", frame)
+
+    # make ElmGenstat and connect to composite model
+    gen = make_ElmPvsys(app, net, elm_data, bus1, station_controller)
+    comp_model.SetAttribute("Generator", gen)
+
+    # make ElmDsls
+    plant_control_dsl = None
+    for dsl_name, dsl_model in elm_data["dsl"].items():
+        # make dsl
+        dsl = make_ElmDsl(
+            app,
+            comp_model,
+            dsl_model,
+            wecc_dsl_models[dsl_name]["blkdef"],
+        )
+
+        # check if the DSL model is a plant controller and return if so.
+        # otherwise set dsl to correct slot
+        slot_name = wecc_dsl_models[dsl_name]["slot"]
+        if slot_name == "Plant Control DSL":
+            plant_control_dsl = dsl
+            continue
+
+        # set dsl to correct slot
+        comp_model.SetAttribute(slot_name, dsl)
+
+    # make measurement devices
+    pq_measurement_data = {
+        "elm": {
+            "loc_name": f"pq_meas_{name}",
+            "pcubic": gen.bus1,
+            "i_mode": 1,
+            "i_orient": 1,
+            "iAstabint": 1,
+        }
+    }
+    pq_measurement = make_StaPqmea(app, comp_model, pq_measurement_data)
+    comp_model.SetAttribute("Power Measurement", pq_measurement)
+
+    v_measurement_data = {
+        "elm": {
+            "loc_name": f"v_meas_{name}",
+            "pbusbar": gen.bus1.cterm,
+            "iOutput": 0,
+            "i_mode": 1,
+            "iAstabint": 1,
+        }
+    }
+    v_measurement = make_StaVmea(app, comp_model, v_measurement_data)
+    comp_model.SetAttribute("Voltage Measurement", v_measurement)
+
+    # make plant control model if required
+    if plant_control_dsl is not None:
+        plant_control_comp_model = make_WECC_plant_control(
+            app,
+            gen,
+            comp_model,
+            plant_control_dsl,
+            plant_control_frame,
+            v_measurement=v_measurement,
+            pq_measurement=pq_measurement,
+        )
+        comp_model.SetAttribute("Plant Control", plant_control_comp_model)
 
     return comp_model

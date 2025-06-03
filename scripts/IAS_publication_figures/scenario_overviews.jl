@@ -80,7 +80,7 @@ relayout!(
     yaxis=attr(title="Active Power Generation (GW)", showgrid=false),
     showlegend=true,
     width=x_size,
-    height=600
+    height=750
 )
 
 display(pl_gen_dispatch)

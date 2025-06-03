@@ -11,53 +11,54 @@ from .core import *
 from .parse_data import *
 
 
-# runs the isolate section
-def run_isolate_section(
-    app,
-    net,
-    selected_bus_names,
-    fp_source_branch_flows=None,
-    isolated_scenario_name="isolate_section",
-):
-    app.PrintInfo(f"running isolate section")
+# depreceated i think
+# # runs the isolate section
+# def run_isolate_section(
+#     app,
+#     net,
+#     selected_bus_names,
+#     fp_source_branch_flows=None,
+#     isolated_scenario_name="isolate_section",
+# ):
+#     app.PrintInfo(f"running isolate section")
 
-    # delete any existing loads created to replace branches
-    clean_loads(app, net)
+#     # delete any existing loads created to replace branches
+#     clean_loads(app, net)
 
-    # get the ElmTerm objects of the selected buses
-    selected_buses = get_selected_buses(app, selected_bus_names)
-    # get the elements to keep and replace
-    (elements_to_keep, elements_to_replace) = get_elements_to_keep_and_replace(
-        app, selected_buses, fp_source_branch_flows
-    )
-    # get branch flows of source network
-    if fp_source_branch_flows is None:
-        branch_flows = get_branch_flows_from_powerfactory(app, elements_to_replace)
-    else:
-        branch_flows = get_branch_flows_from_csv(
-            app, elements_to_replace, fp_source_branch_flows
-        )
-    # deactivate current operation scenario
-    scenario = app.GetActiveScenario()
-    if scenario is not None:
-        scenario.Deactivate()
-    # get out of service elements
-    out_of_service_elms = get_out_of_service_elms(app, net)
-    # make operation scenario
-    operation_scenario = make_operation_scenario(app, isolated_scenario_name)
+#     # get the ElmTerm objects of the selected buses
+#     selected_buses = get_selected_buses(app, selected_bus_names)
+#     # get the elements to keep and replace
+#     (elements_to_keep, elements_to_replace) = get_elements_to_keep_and_replace(
+#         app, selected_buses, fp_source_branch_flows
+#     )
+#     # get branch flows of source network
+#     if fp_source_branch_flows is None:
+#         branch_flows = get_branch_flows_from_powerfactory(app, elements_to_replace)
+#     else:
+#         branch_flows = get_branch_flows_from_csv(
+#             app, elements_to_replace, fp_source_branch_flows
+#         )
+#     # deactivate current operation scenario
+#     scenario = app.GetActiveScenario()
+#     if scenario is not None:
+#         scenario.Deactivate()
+#     # get out of service elements
+#     out_of_service_elms = get_out_of_service_elms(app, net)
+#     # make operation scenario
+#     operation_scenario = make_operation_scenario(app, isolated_scenario_name)
 
-    # turn off all elements
-    turn_off_elms(app, net.GetContents(1))
-    # turn on relevant elements
-    turn_on_elms(
-        app, [elm for elm in elements_to_keep if elm not in out_of_service_elms]
-    )
-    # replace branches
-    replace_branches(app, net, elements_to_replace, branch_flows)
-    # save operation scenario
-    operation_scenario.Save()
+#     # turn off all elements
+#     turn_off_elms(app, net.GetContents(1))
+#     # turn on relevant elements
+#     turn_on_elms(
+#         app, [elm for elm in elements_to_keep if elm not in out_of_service_elms]
+#     )
+#     # replace branches
+#     replace_branches(app, net, elements_to_replace, branch_flows)
+#     # save operation scenario
+#     operation_scenario.Save()
 
-    return elements_to_keep  # for listing
+#     return elements_to_keep  # for listing
 
 
 # runs isolate section using a base scenario
@@ -132,10 +133,11 @@ def run_isolate_section_from_scenario(
     )
 
     # copy setpoint from base scenario
-    app.PrintInfo("Copying setpoint from base scenario")
-    copy_setpoint_from_base_scenario(
-        app, elements_to_keep, base_scenario, isolated_operation_scenario
-    )
+    if base_scenario_name is not None:
+        app.PrintInfo("Copying setpoint from base scenario")
+        copy_setpoint_from_base_scenario(
+            app, elements_to_keep, base_scenario, isolated_operation_scenario
+        )
 
     # replace branches
     app.PrintInfo("Replacing branches")
@@ -154,7 +156,7 @@ def run_isolate_section_from_scenario(
     isolated_operation_scenario.Save()
 
     # set temp loads to out of service in base scenario
-    if base_scenario is not None:
+    if base_scenario_name is not None:
         base_scenario.Activate()
         set_temp_loads_to_out_of_service(app, net)
         base_scenario.Save()

@@ -1,7 +1,20 @@
 # module SNEM2000d
 
-# using Pkg
-# Pkg.activate(raw"C:\Users\tomph\.julia\dev\SNEM2000d")  # Activate the current project directory
+using Pkg
+# Activate the current project directory
+function get_parent_dir(parent_dir::String, child_dir::String)
+    println("searching for $parent_dir from $child_dir")
+    dir_path = child_dir
+    last_dir = dir_path
+    while !endswith(dir_path, parent_dir)
+        dir_path = dirname(dir_path)
+        last_dir == dir_path && throw(ArgumentError("Package $parent_dir not found. last dir: $dir_path"))
+        last_dir = dir_path
+    end
+    return dir_path
+end
+snem2000d_dir = get_parent_dir("SNEM2000d", @__DIR__)
+Pkg.activate(snem2000d_dir)
 
 
 using CSV
@@ -18,12 +31,12 @@ using PlotlyJS
 
 # unregistered packages
 using ISPhvdc
-using PowerModelsACDCsecurityconstrained
+# using PowerModelsACDCsecurityconstrained
 
 const _PM = PowerModels
 const _PMACDC = PowerModelsACDC
 const _PMSC = PowerModelsSecurityConstrained
-const _PMACDCSC = PowerModelsACDCsecurityconstrained
+# const _PMACDCSC = PowerModelsACDCsecurityconstrained
 const _ISP = ISPhvdc
 const _IM = InfrastructureModels
 const _PL = Plots
@@ -50,5 +63,6 @@ include("make_powerfactory_model/write_pf_data_csvs/write_branch_flows.jl")
 include("load_flow_verification/compare_load_flow.jl")
 
 include("utils.jl")
-
+include("analysis/small_signal_analysis_functions.jl")
+include("analysis/mainland_lcc_analysis_functions.jl")
 # end

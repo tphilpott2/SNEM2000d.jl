@@ -170,47 +170,21 @@ def make_all_ElmGenstat(app, data):
 
         # make wtg models and controllers
         if elm_data["msc"]["powerfactory_model"] in [
-            "wind_generator",
-            "type_3_wind_generator",
-            "type_3_wind_generator_vsr",
+            "WECC_WTG_type_3",
+            "WECC_WTG_type_4A",
+            "WECC_WTG_type_4B",
         ]:
-            make_type_3_wtg(
+            make_WECC_wtg(
                 app,
                 net,
                 elm_data,
                 bus1,
                 get_station_controller(app, data["network"]["ElmStactrl"], elm_data),
                 data["composite_model_frames"][elm_data["msc"]["frame_type"]],
-                data["dsl_model_types"]["WECC_wind_turbine"],
-                vsr_model,
-            )
-        elif elm_data["msc"]["powerfactory_model"] in [
-            "type_4A_wind_generator",
-            "type_4A_wind_generator_vsr",
-        ]:
-            make_type_4A_wtg(
-                app,
-                net,
-                elm_data,
-                bus1,
-                get_station_controller(app, data["network"]["ElmStactrl"], elm_data),
-                data["composite_model_frames"][elm_data["msc"]["frame_type"]],
-                data["dsl_model_types"]["WECC_wind_turbine"],
-                vsr_model,
-            )
-        elif elm_data["msc"]["powerfactory_model"] in [
-            "type_4B_wind_generator",
-            "type_4B_wind_generator_vsr",
-        ]:
-            make_type_4B_wtg(
-                app,
-                net,
-                elm_data,
-                bus1,
-                get_station_controller(app, data["network"]["ElmStactrl"], elm_data),
-                data["composite_model_frames"][elm_data["msc"]["frame_type"]],
-                data["dsl_model_types"]["WECC_wind_turbine"],
-                vsr_model,
+                data["dsl_model_types"],
+                plant_control_frame=data["composite_model_frames"][
+                    "Frame WECC Plant Control"
+                ],
             )
         elif elm_data["msc"]["powerfactory_model"] == "static_generator":
             # create synchronous condenser
@@ -241,24 +215,24 @@ def make_all_ElmPvsys(app, data):
         # get connected bus objects
         bus1 = data["network"]["ElmTerm"][elm_data["con"]["bus1"]]["object"]
 
-        # get voltage source reference model if required
-        vsr_model = (
-            data["dsl_model_types"]["VSR"]
-            if elm_data["msc"]["powerfactory_model"].endswith("_vsr")
-            else False
-        )
-
         # make pv generators
-        make_pv_generator(
-            app,
-            net,
-            elm_data,
-            bus1,
-            get_station_controller(app, data["network"]["ElmStactrl"], elm_data),
-            data["composite_model_frames"][elm_data["msc"]["frame_type"]],
-            data["dsl_model_types"]["WECC_pv"],
-            vsr_model,
-        )
+        if elm_data["msc"]["powerfactory_model"] == "WECC_PV":
+            make_WECC_large_scale_pv(
+                app,
+                net,
+                elm_data,
+                bus1,
+                get_station_controller(app, data["network"]["ElmStactrl"], elm_data),
+                data["composite_model_frames"][elm_data["msc"]["frame_type"]],
+                data["dsl_model_types"],
+                plant_control_frame=data["composite_model_frames"][
+                    "Frame WECC Plant Control"
+                ],
+            )
+        else:
+            raise ValueError(
+                f"Error creating ElmPvsys {name}. powerfactory_model {elm_data['msc']['powerfactory_model']} not recognised"
+            )
 
     app.PrintInfo(
         f"All elements of class ElmPvsys made in: \t\t{round(perf_counter() - ts, 2)}"

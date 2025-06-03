@@ -1,3 +1,6 @@
+from datetime import datetime, timezone, timedelta
+import csv
+
 # Functions that are specific to creating the NEM network
 
 
@@ -101,8 +104,98 @@ def get_nem_dynamic_models(app, data):
                 "WECC_renewable_energy\\REGC_A.BlkDef"
             )[0],
         },
-        # vsr dsl
-        "VSR": nem_dynamic_models.GetContents(
-            "WECC_renewable_energy\\Voltage Source Reference (dq).BlkDef"
-        )[0],
     }
+
+
+# parses date string to UTC timestamp (seconds since 1970-01-01 00:00:00)
+# always assumes time is 12:00:00
+def parse_to_utc(date_str, format_str="%Y-%m-%d"):
+    """
+    Parse a date string to UTC timestamp (seconds since 1970-01-01 00:00:00).
+    Always assumes time is 12:00:00.
+
+    Args:
+        date_str (str): Date string to parse (YYYY-MM-DD)
+        format_str (str): Format string for datetime.strptime
+
+    Returns:
+        int: Unix timestamp (seconds since epoch)
+
+    Example:
+        # Parse a date
+        timestamp = parse_to_utc("2024-03-14")
+
+        # Use with NewStage
+        scheme.NewStage("Stage1", timestamp, 1)
+    """
+    try:
+        # Parse the string to datetime and set time to noon
+        dt = datetime.strptime(date_str, format_str)
+        dt = dt.replace(hour=12, minute=0, second=0, tzinfo=timezone.utc)
+
+        # Convert to Unix timestamp (seconds since epoch)
+        return int(dt.timestamp())
+
+    except ValueError as e:
+        raise ValueError(f"Failed to parse date '{date_str}': {e}")
+
+
+# reads rez gen capacities from csv file
+# should be located in the data folder
+def read_rez_gen_capacities(app, path_gen_capacities):
+    rez_gen_capacities = {}
+    with open(path_gen_capacities, "r") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        idx_of = {val: ind for ind, val in enumerate(header)}
+        for row in reader:
+            gen_name = row[idx_of["gen_name"]]
+            rez_gen_capacities[gen_name] = {}
+            for year in range(2025, 2051):
+                capacity = float(row[idx_of[str(year)]])
+                rez_gen_capacities[gen_name][year] = capacity
+    return rez_gen_capacities
+
+
+# makes variations for each ISP year in the year range
+def make_isp_variation(app, path_gen_capacities, year_range=(2026, 2051)):
+    # delete existing variations
+    variations = app.GetProjectFolder("scheme")
+    for variation in variations.GetContents():
+        variation.Deactivate()
+        variation.Delete()
+
+    # read rez gen capacities
+    rez_gen_capacities = read_rez_gen_capacities(app, path_gen_capacities)
+
+    # get rez gens
+    rez_wtgs = [
+        wtg
+        for wtg in app.GetCalcRelevantObjects("*.ElmGenstat")
+        if wtg.loc_name.startswith("wtg_")
+    ]
+    rez_pvs = [
+        pv
+        for pv in app.GetCalcRelevantObjects("*.ElmPvsys")
+        if pv.loc_name.startswith("pv_")
+    ]
+
+    # create variation
+    isp_scheme = variations.CreateObject("IntScheme")
+    isp_scheme.loc_name = "ISPHVDC"
+
+    # create new stage for each year
+    for year in range(year_range[0], year_range[1]):
+        date_str = f"{year}-01-01"
+        stage = isp_scheme.NewStage(
+            f"{year}",
+            parse_to_utc(date_str),
+            1,
+        )
+
+        # set rez gen capacities for ISP year
+        for wtg in rez_wtgs:
+            wtg.SetAttribute("sgn", rez_gen_capacities[wtg.loc_name][year])
+        for pv in rez_pvs:
+            pv.SetAttribute("sgn", 1000 * rez_gen_capacities[pv.loc_name][year])  # kVA
+        app.PrintInfo(f"Created ISP variation for {year}")

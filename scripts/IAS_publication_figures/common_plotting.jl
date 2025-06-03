@@ -1,14 +1,27 @@
+function get_parent_dir(parent_dir::String, child_dir::String)
+    println("searching for $parent_dir from $child_dir")
+    dir_path = child_dir
+    last_dir = dir_path
+    while !endswith(dir_path, parent_dir)
+        dir_path = dirname(dir_path)
+        last_dir == dir_path && throw(ArgumentError("Package $parent_dir not found. last dir: $dir_path"))
+        last_dir = dir_path
+    end
+    return dir_path
+end
+snem2000d_dir = get_parent_dir("SNEM2000d", @__DIR__)
+include(joinpath(snem2000d_dir, "src", "SNEM2000d.jl"))
 # define figures directory
-snem2000d_dir = (@__DIR__) |> dirname |> dirname
 figs_dir = joinpath(snem2000d_dir, "results", "IAS_publication_figures")
+
 
 # common kwargs for consistent plotting style
 x_size = 1500
 common_kwargs = [
     :framestyle => :box,
     :fontfamily => "Times Roman",
-    :xtickfontsize => 22,
-    :ytickfontsize => 22,
+    :xtickfontsize => 25,
+    :ytickfontsize => 25,
     :xlabelfontsize => 30,
     :ylabelfontsize => 30,
     :legendfontsize => 30,
@@ -40,7 +53,7 @@ plotlyjs_paper_bgcolor = "white"
 
 plotlyjs_font = attr(
     family="Times Roman",
-    size=24
+    size=36
 )
 
 default_layout = Layout(

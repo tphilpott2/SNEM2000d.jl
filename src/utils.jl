@@ -1,13 +1,13 @@
-# make directory if doesnt exist
-function mkdir_if(dir_path)
-    if isdir(dir_path) == false
-        mkdir(dir_path)
-        println("Created: '$dir_path'")
-    else
-        println("Already exists: '$dir_path'")
-    end
-    return dir_path
-end
+# # make directory if doesnt exist
+# function mkdir_if(dir_path)
+#     if isdir(dir_path) == false
+#         mkdir(dir_path)
+#         println("Created: '$dir_path'")
+#     else
+#         println("Already exists: '$dir_path'")
+#     end
+#     return dir_path
+# end
 
 ##########################################################################
 # Functions for converting dictionaries to dataframes
@@ -69,7 +69,7 @@ end
 # Functions to handle PowerFactory results
 ##########################################################################
 
-function parse_pf_header(fp_header::String)
+function parse_powerfactory_header(fp_header::String)
     df = DataFrame(
         :col => Vector{String}(undef, 0),
         :elm => Vector{String}(undef, 0),
@@ -96,39 +96,71 @@ function parse_pf_header(fp_header::String)
 
     return df
 end
-function parse_pf_rms(fp::String, header_df::DataFrame)
-    df = CSV.File(fp, header=1:2) |> DataFrame
+function parse_powerfactory_rms(fp::String, header_df::DataFrame; drop_missing::Bool=true)
+    df = CSV.File(
+        fp,
+        header=1:2,
+        select=header_df.col,
+        missingstring=["nan", "-nan(ind)", "#INF", "-#INF"],
+    ) |> DataFrame
+
+    # process names
     header_df.var = [join(split(var, ":")[2:end], "_") for var in header_df.var] # remove variable set
-    # header_df.var = [split(var, ":")[2] for var in header_df.var] # remove variable set
     nms = ["$(row.elm)_$(row.var)" for row in eachrow(header_df)] # join elm and variable
     nms[1] = "time" # first column is time
     rename!(df, nms)
+
+    # drop missing
+    drop_missing && dropmissing!(df)
     return df
 end
-function parse_pf_rms(folder_path::String, file_name::String)
+
+# parse pf rms with file name and folder path
+function parse_powerfactory_rms(
+    folder_path::String,
+    file_name::String;
+    elms::Vector{String}=String[],
+    vars::Vector{String}=String[],
+    drop_missing::Bool=true,
+)
+    # get header df
     fp_header = joinpath(folder_path, "header_$(file_name).csv")
     fp_file = joinpath(folder_path, "$(file_name).csv")
-    header_df = parse_pf_header(fp_header)
-    df = parse_pf_rms(fp_file, header_df)
+    header_df = parse_powerfactory_header(fp_header)
+
+
+    # filter header_df for selected elms and vars
+    if !isempty(elms)
+        push!(elms, "time") # time is always included
+        filter!(r -> r.elm in elms, header_df)
+    end
+    if !isempty(vars)
+        push!(vars, "b:tnow") # b:tnow (time) is always included
+        filter!(r -> r.var in vars, header_df)
+    end
+    header_df.col = parse.(Int, header_df.col) # convert column to int
+
+    # parse rms file
+    df = parse_powerfactory_rms(fp_file, header_df)
     return df
 end
 
 # plot_results
-function plot_pf(df::DataFrame, var::String; kwargs...)
+function plot_powerfactory(df::DataFrame, var::String; kwargs...)
     return plot(df.time, df[:, var], label=var, lw=2; kwargs...)
 end
-function plot_pf(f::Function, df::DataFrame, var::String; kwargs...)
+function plot_powerfactory(f::Function, df::DataFrame, var::String; kwargs...)
     return plot(df.time, f.(df[:, var]), label=var, lw=2; kwargs...)
 end
-function plot_pf!(df::DataFrame, var::String; kwargs...)
+function plot_powerfactory!(df::DataFrame, var::String; kwargs...)
     plot!(df.time, df[:, var], label=var, lw=2; kwargs...)
 end
-function plot_pf!(f::Function, df::DataFrame, var::String; kwargs...)
+function plot_powerfactory!(f::Function, df::DataFrame, var::String; kwargs...)
     return plot!(df.time, f.(df[:, var]), label=var, lw=2; kwargs...)
 end
 
 # parse small signal data
-function parse_pf_small_signal(folder_path, file_name)
+function parse_powerfactory_small_signal(folder_path, file_name)
     if !endswith(file_name, ".csv")
         file_name *= ".csv"
     end
