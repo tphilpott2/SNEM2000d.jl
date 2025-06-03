@@ -10,19 +10,34 @@ hour = 1
 # load network
 snem2000d = prepare_opf_data_stage_2(scenario, year, snem2000d_dir)
 
+##
 # make plot
 pl_ldf = plot_bus_voltage_comparison(
     joinpath(snem2000d_dir, "results", "load_flow_verification", "hour_$(lpad(hour, 3, '0'))"),
     joinpath(snem2000d_dir, "results", "opf", "2050", "stage_2", string(hour)),
     snem2000d;
     return_plot=true,
-    bottom_margin=(10, :mm),
+    top_margin=(15, :mm),
+    bottom_margin=(15, :mm),
     left_margin=(10, :mm),
-    size=(x_size, 720),
+    size=(x_size, 920),
     markersize=6,
     grid=false,
     common_kwargs...,
 )
+
+plot!(
+    pl_ldf[1],
+    xlabel="PowerFactory\nVoltage Magnitude (p.u.)",
+)
+
+plot!(
+    pl_ldf[2],
+    xlabel="PowerFactory\nVoltage Angle (deg)",
+    # xtick = ()
+
+)
+
 
 # export
 display(pl_ldf)

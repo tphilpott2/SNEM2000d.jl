@@ -1,0 +1,2 @@
+solve_time,termination_status,dual_status,primal_status,objective,objective_lb
+767.1260001659393,LOCALLY_SOLVED,FEASIBLE_POINT,FEASIBLE_POINT,58499.668340222735,-Inf

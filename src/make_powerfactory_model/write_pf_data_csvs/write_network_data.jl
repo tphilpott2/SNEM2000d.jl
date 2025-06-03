@@ -1,13 +1,18 @@
 include(joinpath(@__DIR__, "parse_hypersim_csvs.jl"))
 
 # write dataframes to csvs
-function write_pf_data_csvs(output_dir, output_dfs; prefix="pf_data_")
+function write_pf_data_csvs(output_dir, output_dfs; prefix="pf_data_", clear=false)
+    if clear
+        rm(output_dir, recursive=true)
+        mkdir(output_dir)
+        println("Cleared: '$output_dir'")
+    end
     # make directories
-    if isdir(output_dir) == false
+    if !isdir(output_dir)
         mkdir(output_dir)
         println("Created: '$output_dir'")
     end
-    if isdir("$(output_dir)\\dsl_csvs") == false && "ElmDsl" ∈ keys(output_dfs)
+    if !isdir("$(output_dir)\\dsl_csvs") && "ElmDsl" ∈ keys(output_dfs)
         mkdir("$(output_dir)\\dsl_csvs")
         println("Created: '$(output_dir)\\dsl_csvs'")
     end
@@ -136,16 +141,11 @@ function prepare_output_df_station_controllers(data)
         "thermal_generator" => "ElmSym",
         "hydro_generator" => "ElmSym",
         "synchonous_condenser" => "ElmSym",
-        "wind_generator" => "ElmGenstat",
-        "type_3_wind_generator_vsr" => "ElmGenstat",
-        "type_4A_wind_generator_vsr" => "ElmGenstat",
-        "type_4B_wind_generator_vsr" => "ElmGenstat",
-        "type_3_wind_generator" => "ElmGenstat",
-        "type_4A_wind_generator" => "ElmGenstat",
-        "type_4B_wind_generator" => "ElmGenstat",
+        "WECC_WTG_type_3" => "ElmGenstat",
+        "WECC_WTG_type_4A" => "ElmGenstat",
+        "WECC_WTG_type_4B" => "ElmGenstat",
+        "WECC_PV" => "ElmPvsys",
         "static_generator" => "ElmGenstat",
-        "pv_generator" => "ElmPvsys",
-        "pv_generator_vsr" => "ElmPvsys",
     )
     for row in eachrow(stactrl_df)
         gens = split(row.con_gens, ", ")
@@ -309,23 +309,18 @@ end
 ###############################################################################
 # seperate csvs are created depending on fuel source
 
-# supported generator types
+# Update supported generator types list
 supported_generator_types = [
     "thermal_generator",
     "hydro_generator",
-    "wind_generator",
-    "type_3_wind_generator",
-    "type_3_wind_generator_vsr",
-    "type_4A_wind_generator",
-    "type_4A_wind_generator_vsr",
-    "type_4B_wind_generator",
-    "type_4B_wind_generator_vsr",
-    "solar_generator",
     "static_generator",
-    "pv_generator",
-    "pv_generator_vsr",
     "static_var_compensator",
+    "WECC_WTG_type_3",
+    "WECC_WTG_type_4A",
+    "WECC_WTG_type_4B",
+    "WECC_PV",
 ]
+
 
 function prepare_output_df_gens(data, dir_hypersim_csvs, stactrl_df)
     gens = copy(data["gen"])
@@ -377,43 +372,39 @@ function prepare_output_df_gens(data, dir_hypersim_csvs, stactrl_df)
         end
     end
 
+
     # prepare output dfs for different generator types
     synchronous_gen_dfs = prepare_output_df_synchronous_machines(gen_df, dir_hypersim_csvs)
-    static_gen_dfs = prepare_output_df_static_gens(gen_df)
-    pv_gen_dfs = prepare_output_df_pv_gens(gen_df)
+    static_gen_df = prepare_output_df_static_gens(gen_df)
+    pv_gen_df = prepare_output_df_pv_gens(gen_df)
     svs_dfs = prepare_output_df_static_var_compensators(gen_df)
+    wecc_dsl_dfs = prepare_output_df_wecc_dsls(data)
 
+    # # combine REGC_A dsls from wtgs and pv systems
+    # REGC_A_df = vcat(
+    #     static_gen_dfs["REGC_A"],
+    #     pv_gen_dfs["REGC_A"],
+    # )
 
-    # combine REGC_A dsls from wtgs and pv systems
-    REGC_A_df = vcat(
-        static_gen_dfs["REGC_A"],
-        pv_gen_dfs["REGC_A"],
-    )
-
-    # combine VSR dsls from wtgs and pv systems
-    VSR_df = vcat(
-        static_gen_dfs["VSR"],
-        pv_gen_dfs["VSR"],
-    )
+    # # combine VSR dsls from wtgs and pv systems
+    # VSR_df = vcat(
+    #     static_gen_dfs["VSR"],
+    #     pv_gen_dfs["VSR"],
+    # )
 
     return Dict(
         "ElmSym" => synchronous_gen_dfs["ElmSym"],
-        "ElmGenstat" => static_gen_dfs["ElmGenstat"],
-        "ElmPvsys" => pv_gen_dfs["ElmPvsys"],
+        "ElmGenstat" => static_gen_df,
+        "ElmPvsys" => pv_gen_df,
         "ElmSvs" => svs_dfs,
-        "ElmDsl" => Dict(
-            "IEEET1" => synchronous_gen_dfs["IEEET1"],
-            "PSS2B" => synchronous_gen_dfs["PSS2B"],
-            "TGOV1" => synchronous_gen_dfs["TGOV1"],
-            "HYGOV" => synchronous_gen_dfs["HYGOV"],
-            "WTGTRQ_A" => static_gen_dfs["WTGTRQ_A"],
-            "WTGPT_A" => static_gen_dfs["WTGPT_A"],
-            "WTGAR_A" => static_gen_dfs["WTGAR_A"],
-            "WTGT_A" => static_gen_dfs["WTGT_A"],
-            "REEC_A" => static_gen_dfs["REEC_A"],
-            "REEC_B" => pv_gen_dfs["REEC_B"],
-            "REGC_A" => REGC_A_df,
-            "VSR" => VSR_df,
+        "ElmDsl" => merge(
+            Dict(
+                "IEEET1" => synchronous_gen_dfs["IEEET1"],
+                "PSS2B" => synchronous_gen_dfs["PSS2B"],
+                "TGOV1" => synchronous_gen_dfs["TGOV1"],
+                "HYGOV" => synchronous_gen_dfs["HYGOV"],
+            ),
+            wecc_dsl_dfs
         )
     )
 end
@@ -497,29 +488,24 @@ end
 
 function prepare_output_df_static_gens(gen_df)
     static_gen_df = filter(row -> row[:msc_powerfactory_model] ∈ [
-            "wind_generator",
             "static_generator",
-            "type_3_wind_generator",
-            "type_3_wind_generator_vsr",
-            "type_4A_wind_generator",
-            "type_4A_wind_generator_vsr",
-            "type_4B_wind_generator",
-            "type_4B_wind_generator_vsr",
+            "WECC_WTG_type_3",
+            "WECC_WTG_type_4A",
+            "WECC_WTG_type_4B",
         ], gen_df)
 
 
     # add frame data
     static_gen_df.msc_frame_type = ["NA" for row in eachrow(static_gen_df)]
     for row in eachrow(static_gen_df)
-        if row.msc_powerfactory_model in ["type_3_wind_generator", "type_3_wind_generator_vsr"]
+        if row.msc_powerfactory_model == "WECC_WTG_type_3"
             row.msc_frame_type = "Frame WECC WT Type 3"
-        elseif row.msc_powerfactory_model in ["type_4A_wind_generator", "type_4A_wind_generator_vsr"]
+        elseif row.msc_powerfactory_model == "WECC_WTG_type_4A"
             row.msc_frame_type = "Frame WECC WT Type 4A"
-        elseif row.msc_powerfactory_model in ["type_4B_wind_generator", "type_4B_wind_generator_vsr"]
+        elseif row.msc_powerfactory_model == "WECC_WTG_type_4B"
             row.msc_frame_type = "Frame WECC WT Type 4B"
-        elseif row.msc_powerfactory_model == "wind_generator"
-            row.msc_frame_type = "Frame WECC WT Type 3"
-            println("Type of wind_generator is deprecated. Generator $(row.elm_loc_name) modelled as type 3.")
+        elseif row.msc_powerfactory_model == "static_generator"
+            row.msc_frame_type = ""
         end
     end
 
@@ -533,39 +519,34 @@ function prepare_output_df_static_gens(gen_df)
     # remove unnecessary columns
     select!(static_gen_df, Not(:elm_ugn))
 
-    # write to csv
+    # sort by name
     sort!(static_gen_df, :elm_loc_name)
 
+    # # extract wtg data
+    # wtg_df = filter(row -> row[:msc_powerfactory_model] ∈ [
+    #         "WECC_WTG_type_3",
+    #         "WECC_WTG_type_4A",
+    #         "WECC_WTG_type_4B",
+    #     ], static_gen_df)
 
-    # extract wtg data
-    wtg_df = filter(row -> row[:msc_powerfactory_model] ∈ [
-            "wind_generator",
-            "static_generator",
-            "type_3_wind_generator",
-            "type_3_wind_generator_vsr",
-            "type_4A_wind_generator",
-            "type_4A_wind_generator_vsr",
-            "type_4B_wind_generator",
-            "type_4B_wind_generator_vsr",
-        ], static_gen_df)
+    # # write controller data to dsl csvs
+    # wtg_dsl_dfs = prepare_output_df_wtg_dsls(wtg_df)
 
-    # write controller data to dsl csvs
-    wtg_dsl_dfs = prepare_output_df_wtg_dsls(wtg_df)
-
-    return Dict(
-        "ElmGenstat" => static_gen_df,
-        "WTGTRQ_A" => wtg_dsl_dfs["WTGTRQ_A"],
-        "WTGPT_A" => wtg_dsl_dfs["WTGPT_A"],
-        "WTGAR_A" => wtg_dsl_dfs["WTGAR_A"],
-        "WTGT_A" => wtg_dsl_dfs["WTGT_A"],
-        "REEC_A" => wtg_dsl_dfs["REEC_A"],
-        "REGC_A" => wtg_dsl_dfs["REGC_A"],
-        "VSR" => wtg_dsl_dfs["VSR"],
-    )
+    # return Dict(
+    #     "ElmGenstat" => static_gen_df,
+    #     "WTGTRQ_A" => wtg_dsl_dfs["WTGTRQ_A"],
+    #     "WTGPT_A" => wtg_dsl_dfs["WTGPT_A"],
+    #     "WTGAR_A" => wtg_dsl_dfs["WTGAR_A"],
+    #     "WTGT_A" => wtg_dsl_dfs["WTGT_A"],
+    #     "REEC_A" => wtg_dsl_dfs["REEC_A"],
+    #     "REGC_A" => wtg_dsl_dfs["REGC_A"],
+    #     "VSR" => wtg_dsl_dfs["VSR"],
+    # )
+    return static_gen_df
 end
 
 function prepare_output_df_pv_gens(gen_df)
-    pv_gen_df = filter(row -> row[:msc_powerfactory_model] ∈ ["pv_generator", "pv_generator_vsr"], gen_df)
+    pv_gen_df = filter(row -> row[:msc_powerfactory_model] == "WECC_PV", gen_df)
 
     # convert power to kW 
     pv_gen_df.elm_sgn = pv_gen_df.elm_sgn .* 1e3
@@ -600,16 +581,17 @@ function prepare_output_df_pv_gens(gen_df)
     # write to csv
     sort!(pv_gen_df, :elm_loc_name)
 
+    # # write controller data to dsl csvs
+    # pv_dsl_dfs = prepare_output_df_pv_dsls(pv_gen_df)
 
-    # write controller data to dsl csvs
-    pv_dsl_dfs = prepare_output_df_pv_dsls(pv_gen_df)
+    # return Dict(
+    #     "ElmPvsys" => pv_gen_df,
+    #     "REEC_B" => pv_dsl_dfs["REEC_B"],
+    #     "REGC_A" => pv_dsl_dfs["REGC_A"],
+    #     "VSR" => pv_dsl_dfs["VSR"],
+    # )
 
-    return Dict(
-        "ElmPvsys" => pv_gen_df,
-        "REEC_B" => pv_dsl_dfs["REEC_B"],
-        "REGC_A" => pv_dsl_dfs["REGC_A"],
-        "VSR" => pv_dsl_dfs["VSR"],
-    )
+    return pv_gen_df
 end
 
 # converters are modelled as static generators in powerfactory
@@ -677,11 +659,11 @@ function prepare_output_df_static_var_compensators(gen_df)
 
     # define capacitor bank capacity
     # assumed to have n_capacitors number of capacitors, each with a rating of elm_sgn / n_capacitors
-    n_capacitors = 1 # arbitrary choice. doesn't affect powerflow results in powerfactory
+    n_capacitors = 10 # arbitrary choice. doesn't affect powerflow results in powerfactory
     svs_df.elm_nxcap = [n_capacitors for i in 1:size(svs_df, 1)] # number of capacitors
-    svs_df.elm_qmin = [row.qmin for row in eachrow(svs_df)] # reactive power output of each capacitor
-    svs_df.elm_qmax = [row.qmax for row in eachrow(svs_df)] # reactive power rating of reactor bank
-    svs_df.elm_tcrmax = [row.qmax for row in eachrow(svs_df)] # maximum reactive power limit of reactor bank
+    svs_df.elm_qmin = [row.qmin / n_capacitors for row in eachrow(svs_df)] # reactive power output of each capacitor
+    svs_df.elm_qmax = [max(row.qmax, 1.1 * abs(row.elm_qgini)) for row in eachrow(svs_df)] # reactive power rating of reactor bank
+    svs_df.elm_tcrmax = [max(row.qmax, 1.1 * abs(row.elm_qgini)) for row in eachrow(svs_df)] # maximum reactive power limit of reactor bank
 
     # configure control mode
     # 0 = no control
@@ -766,222 +748,643 @@ function prepare_output_df_PSS2Bs(PSS2B_gen_names)
     return df_PSS2B
 end
 
-# applies default parameters given in powerfactory
-function prepare_output_df_wtg_dsls(wtg_df)
-    n_wtgs = size(wtg_df, 1)
-    # count and get names of type 3 and 4A wtg models
-    type_3_wtgs = [row.elm_loc_name for row in eachrow(wtg_df) if row.msc_powerfactory_model in ["type_3_wind_generator", "type_3_wind_generator_vsr", "wind_generator"]]
-    n_type_3_wtgs = length(type_3_wtgs)
-    type_4A_wtgs = [row.elm_loc_name for row in eachrow(wtg_df) if row.msc_powerfactory_model in ["type_4A_wind_generator", "type_4A_wind_generator_vsr"]]
-    n_type_4A_wtgs = length(type_4A_wtgs)
+################## WECC DSLS #########################
 
-    # type 3 only
-    WTGTRQ_A_df = DataFrame(
-        :elm_loc_name => ["WTGTRQ_A_$(wtg_name)" for wtg_name in type_3_wtgs],
-        :elm_Tp => [0 for i in 1:n_type_3_wtgs],
-        :elm_Twref => [0 for i in 1:n_type_3_wtgs],
-        :elm_TFlag => [0 for i in 1:n_type_3_wtgs],
-        :elm_Kip => [0.6 for i in 1:n_type_3_wtgs],
-        :elm_Kpp => [3 for i in 1:n_type_3_wtgs],
-        :elm_PFlag => [1 for i in 1:n_type_3_wtgs],
-        :elm_Temin => [0 for i in 1:n_type_3_wtgs],
-        :elm_Temax => [1.1 for i in 1:n_type_3_wtgs],
-        :con_gen => ["$(wtg_name).ElmGenstat" for wtg_name in type_3_wtgs],
-        :mat_0 => ["4,0" for i in 1:n_type_3_wtgs],
-        :mat_1 => ["0.2,0.58" for i in 1:n_type_3_wtgs],
-        :mat_2 => ["0.4,0.72" for i in 1:n_type_3_wtgs],
-        :mat_3 => ["0.6,0.86" for i in 1:n_type_3_wtgs],
-        :mat_4 => ["0.8,1" for i in 1:n_type_3_wtgs],
-    )
-    WTGPT_A_df = DataFrame(
-        :elm_loc_name => ["WTGPT_A_$(wtg_name)" for wtg_name in type_3_wtgs],
-        :elm_Kiw => [25.0 for i in 1:n_type_3_wtgs],
-        :elm_Kic => [30.0 for i in 1:n_type_3_wtgs],
-        :elm_Kpw => [150.0 for i in 1:n_type_3_wtgs],
-        :elm_Kpc => [3.0 for i in 1:n_type_3_wtgs],
-        :elm_Tpi => [0.3 for i in 1:n_type_3_wtgs],
-        :elm_Kcc => [0.0 for i in 1:n_type_3_wtgs],
-        :elm_Tmin => [0.0 for i in 1:n_type_3_wtgs],
-        :elm_dTmin => [-10.0 for i in 1:n_type_3_wtgs],
-        :elm_Tmax => [27.0 for i in 1:n_type_3_wtgs],
-        :elm_dTmax => [10.0 for i in 1:n_type_3_wtgs],
-        :con_gen => ["$(wtg_name).ElmGenstat" for wtg_name in type_3_wtgs],
-    )
-    WTGAR_A_df = DataFrame(
-        :elm_loc_name => ["WTGAR_A_$(wtg_name)" for wtg_name in type_3_wtgs],
-        :elm_Ka => [0.007 for i in 1:n_type_3_wtgs],
-        :elm_T0 => [0.01 for i in 1:n_type_3_wtgs],
-        :con_gen => ["$(wtg_name).ElmGenstat" for wtg_name in type_3_wtgs],
-    )
-
-    # type 3 and 4A
-    WTGT_A_df = DataFrame(
-        :elm_loc_name => ["WTGT_A_$(wtg_name)" for wtg_name in vcat(type_3_wtgs, type_4A_wtgs)],
-        :elm_Ht => [5 for i in 1:(n_type_3_wtgs+n_type_4A_wtgs)],
-        :elm_Dshaft => [1.5 for i in 1:(n_type_3_wtgs+n_type_4A_wtgs)],
-        :elm_Kshaft => [200 for i in 1:(n_type_3_wtgs+n_type_4A_wtgs)],
-        :elm_Hg => [1 for i in 1:(n_type_3_wtgs+n_type_4A_wtgs)],
-        :con_gen => ["$(wtg_name).ElmGenstat" for wtg_name in vcat(type_3_wtgs, type_4A_wtgs)],
-    )
-
-    # all wtg models
-    REEC_A_df = DataFrame(
-        :elm_loc_name => ["REEC_A_$(row.elm_loc_name)" for row in eachrow(wtg_df)],
-        :elm_PfFlag => [0.0 for i in 1:n_wtgs],
-        :elm_VFlag => [1.0 for i in 1:n_wtgs],
-        :elm_Tp => [0.05 for i in 1:n_wtgs],
-        :elm_Kqp => [1.0 for i in 1:n_wtgs],
-        :elm_Kqi => [0.7 for i in 1:n_wtgs],
-        :elm_QFlag => [0.0 for i in 1:n_wtgs],
-        :elm_Kvp => [1.0 for i in 1:n_wtgs],
-        :elm_Kvi => [0.7 for i in 1:n_wtgs],
-        :elm_Trv => [0.01 for i in 1:n_wtgs],
-        :elm_db1 => [-0.05 for i in 1:n_wtgs],
-        :elm_db2 => [0.05 for i in 1:n_wtgs],
-        :elm_Kqv => [2.0 for i in 1:n_wtgs],
-        :elm_Thld => [0.0 for i in 1:n_wtgs],
-        :elm_Vdip => [0.9 for i in 1:n_wtgs],
-        :elm_Vup => [1.1 for i in 1:n_wtgs],
-        :elm_Tiq => [0.01 for i in 1:n_wtgs],
-        :elm_Tpord => [0.01 for i in 1:n_wtgs],
-        :elm_PqFlag => [0.0 for i in 1:n_wtgs],
-        :elm_Imax => [1.3 for i in 1:n_wtgs],
-        :elm_Thld2 => [0.0 for i in 1:n_wtgs],
-        :elm_PFlag => [1.0 for i in 1:n_wtgs],
-        :elm_Vref0 => [0.0 for i in 1:n_wtgs],
-        :elm_Vref1 => [0.0 for i in 1:n_wtgs],
-        :elm_Iq_frz => [0.0 for i in 1:n_wtgs],
-        :elm_Qmin => [-0.436 for i in 1:n_wtgs],
-        :elm_Vmin => [0.9 for i in 1:n_wtgs],
-        :elm_Iql1 => [-1.1 for i in 1:n_wtgs],
-        :elm_dPmin => [-2.0 for i in 1:n_wtgs],
-        :elm_Pmin => [0.0 for i in 1:n_wtgs],
-        :elm_Qmax => [0.436 for i in 1:n_wtgs],
-        :elm_Vmax => [1.1 for i in 1:n_wtgs],
-        :elm_Iqh1 => [1.1 for i in 1:n_wtgs],
-        :elm_dPmax => [2.0 for i in 1:n_wtgs],
-        :elm_Pmax => [1.0 for i in 1:n_wtgs],
-        :mat_0 => ["2,0,2,0" for i in 1:n_wtgs],
-        :mat_1 => ["1.1,1.1,1.1,1.1" for i in 1:n_wtgs],
-        :mat_2 => ["1.15,1,1.15,1" for i in 1:n_wtgs],
-        :con_gen => ["$(row.elm_loc_name).ElmGenstat" for row in eachrow(wtg_df)],
-    )
-    REGC_A_df = DataFrame(
-        :elm_loc_name => ["REGC_A_$(row.elm_loc_name)" for row in eachrow(wtg_df)],
-        :elm_Tg => [0.02 for i in 1:n_wtgs],
-        :elm_Tfltr => [0.02 for i in 1:n_wtgs],
-        :elm_zerox => [0.4 for i in 1:n_wtgs],
-        :elm_brkpt => [0.9 for i in 1:n_wtgs],
-        :elm_lvpl1 => [1.22 for i in 1:n_wtgs],
-        :elm_Volim => [1.2 for i in 1:n_wtgs],
-        :elm_Iolim => [-1.1 for i in 1:n_wtgs],
-        :elm_Khv => [0.7 for i in 1:n_wtgs],
-        :elm_lvpnt0 => [0.4 for i in 1:n_wtgs],
-        :elm_lvpnt1 => [0.8 for i in 1:n_wtgs],
-        :elm_Lvplsw => [1.0 for i in 1:n_wtgs],
-        :elm_Iqrmin => [-999.0 for i in 1:n_wtgs],
-        :elm_Iqrmax => [999.0 for i in 1:n_wtgs],
-        :elm_rrpwr => [10.0 for i in 1:n_wtgs],
-        :elm_iAstabint => [1 for i in 1:n_wtgs],
-        :con_gen => ["$(row.elm_loc_name).ElmGenstat" for row in eachrow(wtg_df)],
-    )
-
-    # voltage source references
-    vsr_wtgs = [row.elm_loc_name for row in eachrow(wtg_df) if occursin("_vsr", row.msc_powerfactory_model)]
-    n_vsr_wtgs = length(vsr_wtgs)
-    VSR_df = DataFrame(
-        :elm_loc_name => ["VSR_$(wtg_name)" for wtg_name in vsr_wtgs],
-        :con_gen => ["$(wtg_name).ElmGenstat" for wtg_name in vsr_wtgs],
-        :elm_Xseries => [10.0 for i in 1:n_vsr_wtgs],
-        :elm_Rseries => [0.0 for i in 1:n_vsr_wtgs],
-        :elm_Tpll => [0.01 for i in 1:n_vsr_wtgs],
-        :elm_ufreeze => [0.0 for i in 1:n_vsr_wtgs],
-    )
-
-    return Dict(
-        "WTGTRQ_A" => WTGTRQ_A_df,
-        "WTGPT_A" => WTGPT_A_df,
-        "WTGAR_A" => WTGAR_A_df,
-        "WTGT_A" => WTGT_A_df,
-        "REEC_A" => REEC_A_df,
-        "REGC_A" => REGC_A_df,
-        "VSR" => VSR_df,
-    )
+function get_gen_class(gen)
+    if gen["powerfactory_model"] ∈ ["WECC_WTG_type_3", "WECC_WTG_type_4A", "WECC_WTG_type_4B"]
+        gen_class = "ElmGenstat"
+    elseif gen["powerfactory_model"] == "WECC_PV"
+        gen_class = "ElmPvsys"
+    elseif gen["powerfactory_model"] ∈ ["Black Coal", "Brown Coal", "Natural Gas", "Water"]
+        gen_class = "ElmSym"
+    else
+        throw(ArgumentError("Gen model $gen[powerfactory_model] not supported"))
+    end
 end
 
-# applies default parameters given in powerfactory
-function prepare_output_df_pv_dsls(pv_df)
-    n_pvs = size(pv_df, 1)
-    REEC_B_df = DataFrame(
-        :elm_loc_name => ["REEC_B_$(row.elm_loc_name)" for row in eachrow(pv_df)],
-        :elm_PfFlag => 0.0,
-        :elm_VFlag => 1.0,
-        :elm_Tp => 0.02,
-        :elm_Kqp => 1.0,
-        :elm_Kqi => 0.7,
-        :elm_QFlag => 0.0,
-        :elm_Kvp => 1.0,
-        :elm_Kvi => 0.7,
-        :elm_Trv => 0.02,
-        :elm_db1 => -0.05,
-        :elm_db2 => 0.05,
-        :elm_Kqv => 2.0,
-        :elm_Vdip => 0.9,
-        :elm_Vup => 1.1,
-        :elm_Tiq => 0.02,
-        :elm_Tpord => 0.02,
-        :elm_PqFlag => 0.0,
-        :elm_Imax => 1.3,
-        :elm_Vref0 => 0.0,
-        :elm_Qmin => -0.43,
-        :elm_Vmin => 0.9,
-        :elm_Iql1 => -1.44,
-        :elm_Pmin => 0.0,
-        :elm_dPmin => -999.0,
-        :elm_Qmax => 0.43,
-        :elm_Vmax => 1.1,
-        :elm_Iqh1 => 1.44,
-        :elm_Pmax => 1.0,
-        :elm_dPmax => 999.0,
-        :con_gen => ["$(row.elm_loc_name).ElmPvsys" for row in eachrow(pv_df)],
-    )
-
-    REGC_A_df = DataFrame(
-        :elm_loc_name => ["REGC_A_$(row.elm_loc_name)" for row in eachrow(pv_df)],
-        :elm_Tg => [0.02 for i in 1:n_pvs],
-        :elm_Tfltr => [0.02 for i in 1:n_pvs],
-        :elm_zerox => [0.4 for i in 1:n_pvs],
-        :elm_brkpt => [0.9 for i in 1:n_pvs],
-        :elm_lvpl1 => [1.22 for i in 1:n_pvs],
-        :elm_Volim => [1.2 for i in 1:n_pvs],
-        :elm_Iolim => [-1.1 for i in 1:n_pvs],
-        :elm_Khv => [0.7 for i in 1:n_pvs],
-        :elm_lvpnt0 => [0.4 for i in 1:n_pvs],
-        :elm_lvpnt1 => [0.8 for i in 1:n_pvs],
-        :elm_Lvplsw => [1.0 for i in 1:n_pvs],
-        :elm_Iqrmin => [-999.0 for i in 1:n_pvs],
-        :elm_Iqrmax => [999.0 for i in 1:n_pvs],
-        :elm_rrpwr => [10.0 for i in 1:n_pvs],
-        :elm_iAstabint => 1,
-        :con_gen => ["$(row.elm_loc_name).ElmPvsys" for row in eachrow(pv_df)],
-    )
-
-    # voltage source references
-    vsr_pvs = [row.elm_loc_name for row in eachrow(pv_df) if occursin("_vsr", row.msc_powerfactory_model)]
-    n_vsr_pvs = length(vsr_pvs)
-    VSR_df = DataFrame(
-        :elm_loc_name => ["VSR_$(pv_name)" for pv_name in vsr_pvs],
-        :con_gen => ["$(pv_name).ElmPvsys" for pv_name in vsr_pvs],
-        :elm_Xseries => [10.0 for i in 1:n_vsr_pvs],
-        :elm_Rseries => [0.0 for i in 1:n_vsr_pvs],
-        :elm_Tpll => [0.01 for i in 1:n_vsr_pvs],
-        :elm_ufreeze => [0.0 for i in 1:n_vsr_pvs],
-    )
-
-    return Dict(
-        "REEC_B" => REEC_B_df,
-        "REGC_A" => REGC_A_df,
-        "VSR" => VSR_df,
-    )
+function add_REEC!(wecc_dsl_dfs, gen; default_model="REEC_A")
+    reec_model = "WECC_REEC" ∉ keys(gen) ? default_model : gen["WECC_REEC"]
+    # check for electrical controller definition. use default_model if not defined
+    if reec_model == "REEC_A"
+        add_REEC_A!(wecc_dsl_dfs, gen)
+    elseif reec_model == "REEC_B"
+        add_REEC_B!(wecc_dsl_dfs, gen)
+    elseif reec_model == "REEC_C"
+        add_REEC_C!(wecc_dsl_dfs, gen)
+    elseif reec_model == "REEC_D"
+        add_REEC_D!(wecc_dsl_dfs, gen)
+    elseif reec_model == "REEC_E"
+        add_REEC_E!(wecc_dsl_dfs, gen)
+    else
+        throw(ArgumentError("WECC_REEC model $gen[WECC_REEC] not supported"))
+    end
 end
 
+function add_REGC!(wecc_dsl_dfs, gen; default_model="REGC_B")
+    reec_model = "WECC_REGC" ∉ keys(gen) ? default_model : gen["WECC_REGC"]
+    if reec_model == "REGC_A"
+        add_REGC_A!(wecc_dsl_dfs, gen)
+    elseif reec_model == "REGC_B"
+        add_REGC_B!(wecc_dsl_dfs, gen)
+    elseif reec_model == "REGC_C"
+        add_REGC_C!(wecc_dsl_dfs, gen)
+    else
+        throw(ArgumentError("WECC_REGC model $gen[WECC_REGC] not supported"))
+    end
+end
+
+function add_REPC!(wecc_dsl_dfs, gen, default_model=nothing)
+    reec_model = "WECC_PlantControl" ∉ keys(gen) ? default_model : gen["WECC_PlantControl"]
+    if reec_model == "REPC_A"
+        add_REPC_A!(wecc_dsl_dfs, gen)
+    elseif reec_model == "REPC_B"
+        add_REPC_B!(wecc_dsl_dfs, gen)
+    elseif isequal(reec_model, nothing)
+        return
+    else
+        throw(ArgumentError("WECC_REPC model $(gen[WECC_REPC]) not supported"))
+    end
+end
+
+function add_REEC_A!(wecc_dsl_dfs, gen)
+    # get gen class
+    gen_class = get_gen_class(gen)
+
+    # add blank row to dataframe
+    # vec = vcat(
+    #     "REEC_A_$(gen["name"])",
+    #     zeros(Float64, size(wecc_dsl_dfs["REEC_A"], 2) - 2),
+    #     "$(gen["name"]).$gen_class"
+    # )
+    # println(length(vec))
+    # println(size(wecc_dsl_dfs["REEC_A"]))
+    push!(
+        wecc_dsl_dfs["REEC_A"],
+        vcat(
+            "REEC_A_$(gen["name"])",
+            zeros(Float64, size(wecc_dsl_dfs["REEC_A"], 2) - 2),
+            "$(gen["name"]).$gen_class"
+        ), promote=true
+    )
+
+    # set parameters to default values
+    wecc_dsl_dfs["REEC_A"][end, :elm_PfFlag] = 0.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_VFlag] = 0.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Tp] = 0.05
+    wecc_dsl_dfs["REEC_A"][end, :elm_Kqp] = 1.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Kqi] = 0.7
+    wecc_dsl_dfs["REEC_A"][end, :elm_QFlag] = 1.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Kvp] = 1.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Kvi] = 0.7
+    wecc_dsl_dfs["REEC_A"][end, :elm_Trv] = 0.01
+    wecc_dsl_dfs["REEC_A"][end, :elm_db1] = -0.05
+    wecc_dsl_dfs["REEC_A"][end, :elm_db2] = 0.05
+    wecc_dsl_dfs["REEC_A"][end, :elm_Kqv] = 2.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Thld] = 0.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Vdip] = 0.9
+    wecc_dsl_dfs["REEC_A"][end, :elm_Vup] = 1.1
+    wecc_dsl_dfs["REEC_A"][end, :elm_Tiq] = 0.01
+    wecc_dsl_dfs["REEC_A"][end, :elm_Tpord] = 0.01
+    wecc_dsl_dfs["REEC_A"][end, :elm_PqFlag] = 0.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Imax] = 1.3
+    wecc_dsl_dfs["REEC_A"][end, :elm_Thld2] = 0.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_PFlag] = 1.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Vref0] = 0.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Vref1] = 0.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Iq_frz] = 0.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Qmin] = -0.436
+    wecc_dsl_dfs["REEC_A"][end, :elm_Vmin] = 0.9
+    wecc_dsl_dfs["REEC_A"][end, :elm_Iql1] = -1.1
+    wecc_dsl_dfs["REEC_A"][end, :elm_dPmin] = -2.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Pmin] = 0.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Qmax] = 0.436
+    wecc_dsl_dfs["REEC_A"][end, :elm_Vmax] = 1.1
+    wecc_dsl_dfs["REEC_A"][end, :elm_Iqh1] = 1.1
+    wecc_dsl_dfs["REEC_A"][end, :elm_dPmax] = 2.0
+    wecc_dsl_dfs["REEC_A"][end, :elm_Pmax] = 1.0
+    wecc_dsl_dfs["REEC_A"][end, :mat_0] = "2,0,2,0"
+    wecc_dsl_dfs["REEC_A"][end, :mat_1] = "1.1,1.1,1.1,1.1"
+    wecc_dsl_dfs["REEC_A"][end, :mat_2] = "1.15,1,1.15,1"
+end
+
+function add_REEC_B!(wecc_dsl_dfs, gen)
+    # get gen class
+    gen_class = get_gen_class(gen)
+
+    # add blank row to dataframe
+    push!(
+        wecc_dsl_dfs["REEC_B"],
+        vcat(
+            "REEC_B_$(gen["name"])",
+            zeros(Float64, size(wecc_dsl_dfs["REEC_B"], 2) - 2),
+            "$(gen["name"]).$gen_class"
+        )
+    )
+
+    # set parameters to default values
+    wecc_dsl_dfs["REEC_B"][end, :elm_PfFlag] = 0.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_VFlag] = 1.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_Tp] = 0.02
+    wecc_dsl_dfs["REEC_B"][end, :elm_Kqp] = 1.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_Kqi] = 0.7
+    wecc_dsl_dfs["REEC_B"][end, :elm_QFlag] = 0.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_Kvp] = 1.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_Kvi] = 0.7
+    wecc_dsl_dfs["REEC_B"][end, :elm_Trv] = 0.02
+    wecc_dsl_dfs["REEC_B"][end, :elm_db1] = -0.05
+    wecc_dsl_dfs["REEC_B"][end, :elm_db2] = 0.05
+    wecc_dsl_dfs["REEC_B"][end, :elm_Kqv] = 2.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_Vdip] = 0.9
+    wecc_dsl_dfs["REEC_B"][end, :elm_Vup] = 1.1
+    wecc_dsl_dfs["REEC_B"][end, :elm_Tiq] = 0.02
+    wecc_dsl_dfs["REEC_B"][end, :elm_Tpord] = 0.02
+    wecc_dsl_dfs["REEC_B"][end, :elm_PqFlag] = 0.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_Imax] = 1.3
+    wecc_dsl_dfs["REEC_B"][end, :elm_Vref0] = 0.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_Qmin] = -0.43
+    wecc_dsl_dfs["REEC_B"][end, :elm_Vmin] = 0.9
+    wecc_dsl_dfs["REEC_B"][end, :elm_Iql1] = -1.44
+    wecc_dsl_dfs["REEC_B"][end, :elm_Pmin] = 0.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_dPmin] = -999.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_Qmax] = 0.43
+    wecc_dsl_dfs["REEC_B"][end, :elm_Vmax] = 1.1
+    wecc_dsl_dfs["REEC_B"][end, :elm_Iqh1] = 1.44
+    wecc_dsl_dfs["REEC_B"][end, :elm_Pmax] = 1.0
+    wecc_dsl_dfs["REEC_B"][end, :elm_dPmax] = 999.0
+end
+
+function add_REEC_C!(wecc_dsl_dfs, gen)
+    throw(ArgumentError("REEC_C model not implemented yet"))
+end
+
+function add_REEC_D!(wecc_dsl_dfs, gen)
+    throw(ArgumentError("REEC_D model not implemented yet"))
+end
+
+function add_REEC_E!(wecc_dsl_dfs, gen)
+    throw(ArgumentError("REEC_E model not implemented yet"))
+end
+
+function add_REGC_A!(wecc_dsl_dfs, gen)
+    # get gen class
+    gen_class = get_gen_class(gen)
+
+    # add blank row to dataframe
+    push!(
+        wecc_dsl_dfs["REGC_A"],
+        vcat(
+            "REGC_A_$(gen["name"])",
+            zeros(Float64, size(wecc_dsl_dfs["REGC_A"], 2) - 2),
+            "$(gen["name"]).$gen_class"
+        )
+    )
+
+    # set parameters to default values
+    wecc_dsl_dfs["REGC_A"][end, :elm_Tg] = 0.02
+    wecc_dsl_dfs["REGC_A"][end, :elm_Tfltr] = 0.02
+    wecc_dsl_dfs["REGC_A"][end, :elm_zerox] = 0.4
+    wecc_dsl_dfs["REGC_A"][end, :elm_brkpt] = 0.9
+    wecc_dsl_dfs["REGC_A"][end, :elm_lvpl1] = 1.22
+    wecc_dsl_dfs["REGC_A"][end, :elm_Volim] = 1.2
+    wecc_dsl_dfs["REGC_A"][end, :elm_Iolim] = -1.1
+    wecc_dsl_dfs["REGC_A"][end, :elm_Khv] = 0.7
+    wecc_dsl_dfs["REGC_A"][end, :elm_lvpnt0] = 0.4
+    wecc_dsl_dfs["REGC_A"][end, :elm_lvpnt1] = 0.8
+    wecc_dsl_dfs["REGC_A"][end, :elm_Lvplsw] = 1.0
+    wecc_dsl_dfs["REGC_A"][end, :elm_Iqrmin] = -999.0
+    wecc_dsl_dfs["REGC_A"][end, :elm_Iqrmax] = 999.0
+    wecc_dsl_dfs["REGC_A"][end, :elm_rrpwr] = 10.0
+    wecc_dsl_dfs["REGC_A"][end, :elm_iAstabint] = 1
+end
+
+function add_REGC_B!(wecc_dsl_dfs, gen)
+    # get gen class
+    gen_class = get_gen_class(gen)
+
+    # add blank row to dataframe
+    push!(
+        wecc_dsl_dfs["REGC_B"],
+        vcat(
+            "REGC_B_$(gen["name"])",
+            zeros(Float64, size(wecc_dsl_dfs["REGC_B"], 2) - 2),
+            "$(gen["name"]).$gen_class"
+        )
+    )
+
+    wecc_dsl_dfs["REGC_B"][end, :elm_Tg] = 0.02
+    wecc_dsl_dfs["REGC_B"][end, :elm_Tfltr] = 0.02
+    wecc_dsl_dfs["REGC_B"][end, :elm_RateFlag] = 0.0
+    wecc_dsl_dfs["REGC_B"][end, :elm_re] = 0.0
+    wecc_dsl_dfs["REGC_B"][end, :elm_xe] = 0.1
+    wecc_dsl_dfs["REGC_B"][end, :elm_Te] = 0.02
+    wecc_dsl_dfs["REGC_B"][end, :elm_Iqrmin] = -999.0
+    wecc_dsl_dfs["REGC_B"][end, :elm_Iqrmax] = 999.0
+    wecc_dsl_dfs["REGC_B"][end, :elm_rrpwr] = 10.0
+    wecc_dsl_dfs["REGC_B"][end, :elm_iAstabint] = 1
+end
+
+function add_REGC_C!(wecc_dsl_dfs, gen)
+    throw(ArgumentError("REGC_C model not implemented yet"))
+end
+
+function add_REPC_A!(wecc_dsl_dfs, gen)
+    # add blank row to dataframe
+    push!(
+        wecc_dsl_dfs["REPC_A"],
+        vcat(
+            "REPC_A_$(gen["name"])",
+            zeros(Float64, size(wecc_dsl_dfs["REPC_A"], 2) - 2),
+            "$(gen["name"]).$(get_gen_class(gen))"
+        )
+    )
+
+    # set parameters to default values
+    wecc_dsl_dfs["REPC_A"][end, :elm_Rc] = 0
+    wecc_dsl_dfs["REPC_A"][end, :elm_Xc] = 0
+    wecc_dsl_dfs["REPC_A"][end, :elm_Tfltr] = 0.02
+    wecc_dsl_dfs["REPC_A"][end, :elm_Tp] = 0.25
+    wecc_dsl_dfs["REPC_A"][end, :elm_db] = 0.002
+    wecc_dsl_dfs["REPC_A"][end, :elm_Kp] = 1
+    wecc_dsl_dfs["REPC_A"][end, :elm_Ki] = 5
+    wecc_dsl_dfs["REPC_A"][end, :elm_Vfrz] = 0.7
+    wecc_dsl_dfs["REPC_A"][end, :elm_Tft] = 0
+    wecc_dsl_dfs["REPC_A"][end, :elm_Tfv] = 0.05
+    wecc_dsl_dfs["REPC_A"][end, :elm_Kc] = 10
+    wecc_dsl_dfs["REPC_A"][end, :elm_FrqFlag] = 1
+    wecc_dsl_dfs["REPC_A"][end, :elm_RefFlag] = 0
+    wecc_dsl_dfs["REPC_A"][end, :elm_VcmpFlag] = 0
+    wecc_dsl_dfs["REPC_A"][end, :elm_fdbd1] = -0.0006
+    wecc_dsl_dfs["REPC_A"][end, :elm_fdbd2] = 0.0006
+    wecc_dsl_dfs["REPC_A"][end, :elm_Ddn] = 20
+    wecc_dsl_dfs["REPC_A"][end, :elm_Dup] = 20
+    wecc_dsl_dfs["REPC_A"][end, :elm_Kpg] = 1.1
+    wecc_dsl_dfs["REPC_A"][end, :elm_Kig] = 3
+    wecc_dsl_dfs["REPC_A"][end, :elm_Tlag] = 0.1
+    wecc_dsl_dfs["REPC_A"][end, :elm_emin] = -0.5
+    wecc_dsl_dfs["REPC_A"][end, :elm_Qmin] = -0.436
+    wecc_dsl_dfs["REPC_A"][end, :elm_femin] = -99
+    wecc_dsl_dfs["REPC_A"][end, :elm_Pmin] = 0
+    wecc_dsl_dfs["REPC_A"][end, :elm_emax] = 0.5
+    wecc_dsl_dfs["REPC_A"][end, :elm_Qmax] = 0.436
+    wecc_dsl_dfs["REPC_A"][end, :elm_femax] = 99
+    wecc_dsl_dfs["REPC_A"][end, :elm_Pmax] = 1
+end
+
+
+function add_REPC_B!(wecc_dsl_dfs, gen)
+    throw(ArgumentError("REPC_B model not implemented yet"))
+end
+
+function add_WTGTPT_A!(wecc_dsl_dfs, gen)
+    throw(ArgumentError("WTGTPT_A model not implemented yet"))
+end
+
+function add_WTGTRQ_A!(wecc_dsl_dfs, gen)
+    throw(ArgumentError("WTGTRQ_A model not implemented yet"))
+end
+
+function add_WTGAR_A!(wecc_dsl_dfs, gen)
+    throw(ArgumentError("WTGAR_A model not implemented yet"))
+end
+
+function add_WTGT_A!(wecc_dsl_dfs, gen)
+    # add blank row to dataframe
+    push!(
+        wecc_dsl_dfs["WTGT_A"],
+        vcat(
+            "WTGT_A_$(gen["name"])",
+            zeros(Float64, size(wecc_dsl_dfs["WTGT_A"], 2) - 2),
+            "$(gen["name"]).$(get_gen_class(gen))"
+        )
+    )
+
+    # set parameters to default values
+    wecc_dsl_dfs["WTGT_A"][end, :elm_Ht] = 5.0
+    wecc_dsl_dfs["WTGT_A"][end, :elm_Dshaft] = 1.5
+    wecc_dsl_dfs["WTGT_A"][end, :elm_Kshaft] = 200
+    wecc_dsl_dfs["WTGT_A"][end, :elm_Hg] = 1.0
+end
+
+function prepare_output_df_wecc_dsls(data)
+    # initialise dfs
+    wecc_dsl_dfs = Dict{String,DataFrame}(
+        "REEC_A" => DataFrame(
+            :elm_loc_name => String[],
+            :elm_PfFlag => Float64[],
+            :elm_VFlag => Float64[],
+            :elm_Tp => Float64[],
+            :elm_Kqp => Float64[],
+            :elm_Kqi => Float64[],
+            :elm_QFlag => Float64[],
+            :elm_Kvp => Float64[],
+            :elm_Kvi => Float64[],
+            :elm_Trv => Float64[],
+            :elm_db1 => Float64[],
+            :elm_db2 => Float64[],
+            :elm_Kqv => Float64[],
+            :elm_Thld => Float64[],
+            :elm_Vdip => Float64[],
+            :elm_Vup => Float64[],
+            :elm_Tiq => Float64[],
+            :elm_Tpord => Float64[],
+            :elm_PqFlag => Float64[],
+            :elm_Imax => Float64[],
+            :elm_Thld2 => Float64[],
+            :elm_PFlag => Float64[],
+            :elm_Vref0 => Float64[],
+            :elm_Vref1 => Float64[],
+            :elm_Iq_frz => Float64[],
+            :elm_Qmin => Float64[],
+            :elm_Vmin => Float64[],
+            :elm_Iql1 => Float64[],
+            :elm_dPmin => Float64[],
+            :elm_Pmin => Float64[],
+            :elm_Qmax => Float64[],
+            :elm_Vmax => Float64[],
+            :elm_Iqh1 => Float64[],
+            :elm_dPmax => Float64[],
+            :elm_Pmax => Float64[],
+            :mat_0 => String[],
+            :mat_1 => String[],
+            :mat_2 => String[],
+            :con_gen => String[],
+        ),
+        "REEC_B" => DataFrame(
+            :elm_loc_name => String[],
+            :elm_PfFlag => Float64[],
+            :elm_VFlag => Float64[],
+            :elm_Tp => Float64[],
+            :elm_Kqp => Float64[],
+            :elm_Kqi => Float64[],
+            :elm_QFlag => Float64[],
+            :elm_Kvp => Float64[],
+            :elm_Kvi => Float64[],
+            :elm_Trv => Float64[],
+            :elm_db1 => Float64[],
+            :elm_db2 => Float64[],
+            :elm_Kqv => Float64[],
+            :elm_Vdip => Float64[],
+            :elm_Vup => Float64[],
+            :elm_Tiq => Float64[],
+            :elm_Tpord => Float64[],
+            :elm_PqFlag => Float64[],
+            :elm_Imax => Float64[],
+            :elm_Vref0 => Float64[],
+            :elm_Qmin => Float64[],
+            :elm_Vmin => Float64[],
+            :elm_Iql1 => Float64[],
+            :elm_Pmin => Float64[],
+            :elm_dPmin => Float64[],
+            :elm_Qmax => Float64[],
+            :elm_Vmax => Float64[],
+            :elm_Iqh1 => Float64[],
+            :elm_Pmax => Float64[],
+            :elm_dPmax => Float64[],
+            :con_gen => String[],
+        ),
+        "REEC_C" => DataFrame(
+            :elm_loc_name => String[],
+            :elm_PfFlag => Float64[],
+            :elm_VFlag => Float64[],
+            :elm_Tp => Float64[],
+            :elm_Kqp => Float64[],
+            :elm_Kqi => Float64[],
+            :elm_QFlag => Float64[],
+            :elm_Kvp => Float64[],
+            :elm_Kvi => Float64[],
+            :elm_Trv => Float64[],
+            :elm_db1 => Float64[],
+            :elm_db2 => Float64[],
+            :elm_Kqv => Float64[],
+            :elm_Vdip => Float64[],
+            :elm_Vup => Float64[],
+            :elm_Tiq => Float64[],
+            :elm_Tpord => Float64[],
+            :elm_PqFlag => Float64[],
+            :elm_Imax => Float64[],
+            :elm_Vref0 => Float64[],
+            :elm_T => Float64[],
+            :elm_SOC0 => Float64[],
+            :elm_Qmin => Float64[],
+            :elm_Vmin => Float64[],
+            :elm_Iql1 => Float64[],
+            :elm_SCOmin => Float64[],
+            :elm_dPmin => Float64[],
+            :elm_Pmin => Float64[],
+            :elm_Qmax => Float64[],
+            :elm_Vmax => Float64[],
+            :elm_Iqh1 => Float64[],
+            :elm_SCOmax => Float64[],
+            :elm_dPmax => Float64[],
+            :elm_Pmax => Float64[],
+            :elm_WGO_active => Float64[],
+            :con_gen => String[],
+        ),
+        "REEC_D" => DataFrame(
+            :elm_loc_name => String[],
+            :elm_PfFlag => Float64[],
+            :elm_VFlag => Float64[],
+            :elm_Tp => Float64[],
+            :elm_Kqp => Float64[],
+            :elm_Kqi => Float64[],
+            :elm_QFlag => Float64[],
+            :elm_Kvp => Float64[],
+            :elm_Kvi => Float64[],
+            :elm_Trv => Float64[],
+            :elm_dbd1 => Float64[],
+            :elm_dbd2 => Float64[],
+            :elm_Kqv => Float64[],
+            :elm_Vdip => Float64[],
+            :elm_Vup => Float64[],
+            :elm_Tiq => Float64[],
+            :elm_Tpord => Float64[],
+            :elm_PqFlag => Float64[],
+            :elm_Imax => Float64[],
+            :elm_Thld2 => Float64[],
+            :elm_Ke => Float64[],
+            :elm_PFlag => Float64[],
+            :elm_Vref0 => Float64[],
+            :elm_Vref1 => Float64[],
+            :elm_Rc => Float64[],
+            :elm_Xc => Float64[],
+            :elm_VcmpFlag => Float64[],
+            :elm_Kc => Float64[],
+            :elm_Tr1 => Float64[],
+            :elm_vblkl => Float64[],
+            :elm_vblkh => Float64[],
+            :elm_Tblk_delay => Float64[],
+            :elm_Thld => Float64[],
+            :elm_Iqfrz => Float64[],
+            :elm_qvmin => Float64[],
+            :elm_Vmin => Float64[],
+            :elm_Iql1 => Float64[],
+            :elm_dPmin => Float64[],
+            :elm_Pmin => Float64[],
+            :elm_qvmax => Float64[],
+            :elm_Vmax => Float64[],
+            :elm_Iqh1 => Float64[],
+            :elm_dPmax => Float64[],
+            :elm_Pmax => Float64[],
+            :elm_WGO_active => Float64[],
+            :con_gen => String[],
+        ),
+        "REEC_E" => DataFrame(
+            :elm_loc_name => String[],
+            :elm_PfFlag => Float64[],
+            :elm_VFlag => Float64[],
+            :elm_QFlag => Float64[],
+            :elm_Tp => Float64[],
+            :elm_Kqp => Float64[],
+            :elm_Kqi => Float64[],
+            :elm_Kvp => Float64[],
+            :elm_Kvi => Float64[],
+            :elm_Trv => Float64[],
+            :elm_dbd1 => Float64[],
+            :elm_dbd2 => Float64[],
+            :elm_Kqv => Float64[],
+            :elm_Vdip => Float64[],
+            :elm_Vup => Float64[],
+            :elm_Tiq => Float64[],
+            :elm_PqFlag => Float64[],
+            :elm_PqFlagFRT => Float64[],
+            :elm_Imax => Float64[],
+            :elm_Ke => Float64[],
+            :elm_PEFlag => Float64[],
+            :elm_PFlag => Float64[],
+            :elm_Kpp => Float64[],
+            :elm_Kpi => Float64[],
+            :elm_Tpord => Float64[],
+            :elm_Vref0 => Float64[],
+            :elm_Vref1 => Float64[],
+            :elm_Rc => Float64[],
+            :elm_Xc => Float64[],
+            :elm_VcmpFlag => Float64[],
+            :elm_Kc => Float64[],
+            :elm_Tr1 => Float64[],
+            :elm_vblkl => Float64[],
+            :elm_vblkh => Float64[],
+            :elm_Tblk_delay => Float64[],
+            :elm_Thld2 => Float64[],
+            :elm_Thld => Float64[],
+            :elm_Iqfrz => Float64[],
+            :elm_qvmin => Float64[],
+            :elm_Vmin => Float64[],
+            :elm_Iql1 => Float64[],
+            :elm_dPmin => Float64[],
+            :elm_Pmin => Float64[],
+            :elm_qvmax => Float64[],
+            :elm_Vmax => Float64[],
+            :elm_Iqh1 => Float64[],
+            :elm_dPmax => Float64[],
+            :elm_Pmax => Float64[],
+            :elm_WGO_active => Float64[],
+            :con_gen => String[],
+        ),
+        "REGC_A" => DataFrame(
+            :elm_loc_name => String[],
+            :elm_Tg => Float64[],
+            :elm_Tfltr => Float64[],
+            :elm_zerox => Float64[],
+            :elm_brkpt => Float64[],
+            :elm_lvpl1 => Float64[],
+            :elm_Volim => Float64[],
+            :elm_Iolim => Float64[],
+            :elm_Khv => Float64[],
+            :elm_lvpnt0 => Float64[],
+            :elm_lvpnt1 => Float64[],
+            :elm_Lvplsw => Float64[],
+            :elm_Iqrmin => Float64[],
+            :elm_Iqrmax => Float64[],
+            :elm_rrpwr => Float64[],
+            :elm_iAstabint => Int64[],
+            :con_gen => String[],
+        ),
+        "REGC_B" => DataFrame(
+            :elm_loc_name => String[],
+            :elm_Tg => Float64[],
+            :elm_Tfltr => Float64[],
+            :elm_RateFlag => Float64[],
+            :elm_re => Float64[],
+            :elm_xe => Float64[],
+            :elm_Te => Float64[],
+            :elm_Iqrmin => Float64[],
+            :elm_Iqrmax => Float64[],
+            :elm_rrpwr => Float64[],
+            :elm_iAstabint => Int64[],
+            :con_gen => String[],
+        ),
+        "REGC_C" => DataFrame(),
+        "WTGTPT_A" => DataFrame(),
+        "WTGTRQ_A" => DataFrame(),
+        "WTGAR_A" => DataFrame(),
+        "WTGT_A" => DataFrame(
+            :elm_loc_name => String[],
+            :elm_Ht => Float64[],
+            :elm_Dshaft => Float64[],
+            :elm_Kshaft => Float64[],
+            :elm_Hg => Float64[],
+            :con_gen => String[],
+        ),
+        "REPC_A" => DataFrame(
+            :elm_loc_name => String[],
+            :elm_Rc => Float64[],
+            :elm_Xc => Float64[],
+            :elm_Tfltr => Float64[],
+            :elm_Tp => Float64[],
+            :elm_db => Float64[],
+            :elm_Kp => Float64[],
+            :elm_Ki => Float64[],
+            :elm_Vfrz => Float64[],
+            :elm_Tft => Float64[],
+            :elm_Tfv => Float64[],
+            :elm_Kc => Float64[],
+            :elm_FrqFlag => Float64[],
+            :elm_RefFlag => Float64[],
+            :elm_VcmpFlag => Float64[],
+            :elm_fdbd1 => Float64[],
+            :elm_fdbd2 => Float64[],
+            :elm_Ddn => Float64[],
+            :elm_Dup => Float64[],
+            :elm_Kpg => Float64[],
+            :elm_Kig => Float64[],
+            :elm_Tlag => Float64[],
+            :elm_emin => Float64[],
+            :elm_Qmin => Float64[],
+            :elm_femin => Float64[],
+            :elm_Pmin => Float64[],
+            :elm_emax => Float64[],
+            :elm_Qmax => Float64[],
+            :elm_femax => Float64[],
+            :elm_Pmax => Float64[],
+            :con_gen => String[],
+        ),
+    )
+
+    for (g, gen) in data["gen"]
+        if startswith(gen["powerfactory_model"], "WECC")
+            add_REEC!(wecc_dsl_dfs, gen)
+            add_REGC!(wecc_dsl_dfs, gen)
+            add_REPC!(wecc_dsl_dfs, gen)
+
+            # check for additional models for WECC_WTGs
+            if gen["powerfactory_model"] == "WECC_WTG_type_3"
+                add_WTGTPT_A!(wecc_dsl_dfs, gen)
+                add_WTGTRQ_A!(wecc_dsl_dfs, gen)
+                add_WTGAR_A!(wecc_dsl_dfs, gen)
+                add_WTGT_A!(wecc_dsl_dfs, gen)
+            elseif gen["powerfactory_model"] == "WECC_WTG_type_4A"
+                add_WTGT_A!(wecc_dsl_dfs, gen)
+            end
+
+        end
+    end
+
+    # remove empty dfs
+    for k in keys(wecc_dsl_dfs)
+        if isempty(wecc_dsl_dfs[k])
+            delete!(wecc_dsl_dfs, k)
+        end
+    end
+
+    return wecc_dsl_dfs
+end

@@ -175,8 +175,9 @@ def make_event_EvtSym(
 def make_event_gen_disconnect(app, events_file, gen, t_disconnect):
     # make switch event
     make_event_EvtSwitch(app, events_file, gen, {"time": t_disconnect})
-    # set gen torque to 0 so that it doesnt crash the simulation
-    make_event_EvtSym(app, events_file, gen, -1, {"time": t_disconnect + 0.01})
+    if gen.GetClassName() == "ElmSym":
+        # set gen torque to 0 so that it doesnt crash the simulation
+        make_event_EvtSym(app, events_file, gen, -1, {"time": t_disconnect + 0.01})
 
 
 # configures the ComInc and ComSim objects to run RMS simulation, then runs it

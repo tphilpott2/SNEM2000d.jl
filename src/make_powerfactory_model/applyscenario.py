@@ -137,22 +137,18 @@ def parse_setpoint_from_opf_results(app, opf_results_dir):
 
 
 # makes an operation scenario
-def make_operation_scenario(app, operation_scenario_name):
+def make_operation_scenario(app, operation_scenario_name, target=None):
     # get study case
-    operation_scenarios_folder = app.GetProjectFolder("scen")
+    if target is None:
+        target = app.GetProjectFolder("scen")
 
     # create operation scenario
-    if (
-        operation_scenarios_folder.GetContents(f"{operation_scenario_name}.IntScenario")
-        != []
-    ):
-        for scenario in operation_scenarios_folder.GetContents(
-            f"{operation_scenario_name}.IntScenario"
-        ):
+    if target.GetContents(f"{operation_scenario_name}.IntScenario") != []:
+        for scenario in target.GetContents(f"{operation_scenario_name}.IntScenario"):
             scenario.Deactivate()
             scenario.Delete()
 
-    operation_scenario = operation_scenarios_folder.CreateObject("IntScenario")
+    operation_scenario = target.CreateObject("IntScenario")
     operation_scenario.loc_name = operation_scenario_name
     operation_scenario.Activate()
     return operation_scenario
@@ -324,3 +320,48 @@ def apply_setpoint_to_operation_scenario(app, operation_scenario, setpoint_data)
     apply_setpoint_svc(app, setpoint_data)
     turn_off_isolated_buses_and_connected_elements(app)
     operation_scenario.Save()
+
+
+def check_if_scenario_has_solved(app, hour_dir):
+    # check if scenario has solved
+    with open(f"{hour_dir / 'metadata.csv'}", "r") as f:
+        reader = csv.reader(f)
+        next(reader)
+        return next(reader)[1] in ["LOCALLY_SOLVED", "ALMOST_LOCALLY_SOLVED"]
+
+
+def add_operation_scenarios_for_isp_year(
+    app, year_dir, skip_existing=True, target=None, hours=None
+):
+    # get target folder
+    if target is None:
+        target = app.GetProjectFolder("scen")
+
+    # get hours
+    if hours is None:
+        hours = os.listdir(year_dir)
+
+    # make operation scenarios for each hour
+    for hour_str in hours:
+        # parse hour
+        hour = int(hour_str)
+        scenario_name = f"hour_{str(hour).zfill(3)}"
+        hour_dir = year_dir / hour_str
+
+        # skip unsolved scenarios
+        if not check_if_scenario_has_solved(app, hour_dir):
+            app.PrintInfo(f"Skipping {scenario_name} because it has not solved")
+            continue
+        # skip if already exists
+        if skip_existing and target.GetContents(f"{scenario_name}.IntScenario") != []:
+            app.PrintInfo(f"Skipping {scenario_name}")
+            continue
+
+        # parse setpoints
+        setpoint_data = parse_setpoint_from_opf_results(app, hour_dir)
+
+        # make scenario
+        operation_scenario = make_operation_scenario(app, scenario_name, target=target)
+
+        # apply setpoints
+        apply_setpoint_to_operation_scenario(app, operation_scenario, setpoint_data)
